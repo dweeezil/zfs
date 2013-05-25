@@ -896,16 +896,18 @@ snapshot_sync(void *arg1, void *arg2, dmu_tx_t *tx)
 static int
 snapshot_one_impl(const char *snapname, void *arg)
 {
-	char fsname[MAXPATHLEN];
+	char *fsname;
 	snapallarg_t *saa = arg;
 	snaponearg_t *soa;
 	objset_t *os;
 	int err;
 
+	fsname = kmem_zalloc(MAXPATHLEN, KM_PUSHPAGE);
 	(void) strlcpy(fsname, snapname, sizeof (fsname));
 	strchr(fsname, '@')[0] = '\0';
 
 	err = dmu_objset_hold(fsname, saa, &os);
+	kmem_free(fsname, MAXPATHLEN);
 	if (err != 0)
 		return (err);
 
