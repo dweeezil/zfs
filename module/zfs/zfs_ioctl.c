@@ -214,6 +214,7 @@ typedef enum {
 } zfs_ioc_poolcheck_t;
 
 typedef struct zfs_ioc_vec {
+	zfs_ioc_legacy_func_t	*zvec_legacy_func;
 	zfs_ioc_func_t		*zvec_func;
 	zfs_secpolicy_func_t	*zvec_secpolicy;
 	zfs_ioc_namecheck_t	zvec_namecheck;
@@ -3285,7 +3286,7 @@ zfs_ioc_snapshot(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 	nvlist_t *snaps;
 	nvlist_t *props = NULL;
 	int error, poollen;
-	nvpair_t *pair;
+	nvpair_t *pair, *pair2;
 
 	(void) nvlist_lookup_nvlist(innvl, "props", &props);
 	if ((error = zfs_check_userprops(poolname, props)) != 0)
@@ -3318,7 +3319,7 @@ zfs_ioc_snapshot(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 			return (EXDEV);
 
 		/* This must be the only snap of this fs. */
-		for (nvpair_t *pair2 = nvlist_next_nvpair(snaps, pair);
+		for (pair2 = nvlist_next_nvpair(snaps, pair);
 		    pair2 != NULL; pair2 = nvlist_next_nvpair(snaps, pair2)) {
 			if (strncmp(name, nvpair_name(pair2), cp - name + 1)
 			    == 0) {
@@ -3372,7 +3373,6 @@ zfs_ioc_log_history(const char *unused, nvlist_t *innvl, nvlist_t *outnvl)
 	return (error);
 }
 
-XXXTSC
 /*
  * inputs:
  * name		dataset name, or when 'arg == NULL' the full snapshot name
@@ -4250,7 +4250,6 @@ zfs_ioc_send(zfs_cmd_t *zc)
 	if (estimate) {
 		error = dmu_send_estimate(tosnap, fromsnap,
 		    &zc->zc_objset_type);
-XXXTSC
 	} else {
 		file_t *fp = getf(zc->zc_cookie);
 		if (fp == NULL) {
@@ -5180,6 +5179,7 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 		}
 	}
 
+	{
 	file_t *fp = getf(fd);
 	if (fp == NULL) {
 		dmu_objset_rele(tosnap, FTAG);
@@ -5193,6 +5193,7 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 
 	if (VOP_SEEK(fp->f_vnode, fp->f_offset, &off, NULL) == 0)
 		fp->f_offset = off;
+	}
 	releasef(fd);
 	if (fromsnap != NULL)
 		dmu_objset_rele(fromsnap, FTAG);
