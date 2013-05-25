@@ -108,7 +108,9 @@ top:
 		dmu_tx_commit(tx);
 		return (dstg->dstg_err);
 	}
+#ifdef ZFS_DEBUG
 skip:
+#endif
 
 	/*
 	 * We don't generally have many sync tasks, so pay the price of
