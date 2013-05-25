@@ -1545,7 +1545,7 @@ zfs_set_version(zfs_sb_t *zsb, uint64_t newvers)
 	}
 
 	spa_history_log_internal_ds(dmu_objset_ds(os), "upgrade", tx,
-	    "from %llu to %llu", zfsvfs->z_version, newvers);
+	    "from %llu to %llu", zsb->z_version, newvers);
 
 	dmu_tx_commit(tx);
 
