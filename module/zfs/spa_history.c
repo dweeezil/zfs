@@ -237,11 +237,8 @@ spa_history_log_sync(void *arg1, void *arg2, dmu_tx_t *tx)
 
 	fnvlist_add_uint64(nvl, ZPOOL_HIST_TIME, gethrestime_sec());
 #ifdef _KERNEL
-	VERIFY(nvlist_add_string(nvrecord, ZPOOL_HIST_HOST,
-	    utsname.nodename) == 0);
-	fnvlist_add_string(nvl, ZPOOL_HIST_HOST, /* utsname.nodename */ "XXXTSClinux");
+	fnvlist_add_string(nvl, ZPOOL_HIST_HOST, utsname.nodename);
 #endif
-
 	if (nvlist_exists(nvl, ZPOOL_HIST_CMD)) {
 		zfs_dbgmsg("command: %s",
 		    fnvlist_lookup_string(nvl, ZPOOL_HIST_CMD));
@@ -262,7 +259,7 @@ spa_history_log_sync(void *arg1, void *arg2, dmu_tx_t *tx)
 	} else if (nvlist_exists(nvl, ZPOOL_HIST_IOCTL)) {
 		zfs_dbgmsg("ioctl %s",
 		    fnvlist_lookup_string(nvl, ZPOOL_HIST_IOCTL));
- 	}
+	}
 
 	record_packed = fnvlist_pack(nvl, &reclen);
 
@@ -432,6 +429,9 @@ spa_history_get(spa_t *spa, uint64_t *offp, uint64_t *len, char *buf)
 	return (err);
 }
 
+/*
+ * The nvlist will be consumed by this call.
+ */
 static void
 log_internal(nvlist_t *nvl, const char *operation, spa_t *spa,
     dmu_tx_t *tx, const char *fmt, va_list adx)
