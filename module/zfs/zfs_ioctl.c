@@ -5525,6 +5525,18 @@ zfs_ioctl_init(void)
 	zfs_ioctl_register_dataset_nolog(ZFS_IOC_TMP_SNAPSHOT,
 	    zfs_ioc_tmp_snapshot, zfs_secpolicy_tmp_snapshot,
 	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY);
+
+	/*
+ 	 * ZoL functions
+	 */
+	zfs_ioctl_register_legacy(ZFS_IOC_CREATE_MINOR, zfs_ioc_create_minor,
+	    zfs_secpolicy_config, DATASET_NAME, B_FALSE, POOL_CHECK_NONE);
+	zfs_ioctl_register_legacy(ZFS_IOC_REMOVE_MINOR, zfs_ioc_remove_minor,
+	    zfs_secpolicy_config, DATASET_NAME, B_FALSE, POOL_CHECK_NONE);
+	zfs_ioctl_register_legacy(ZFS_IOC_EVENTS_NEXT, zfs_ioc_events_next,
+	    zfs_secpolicy_config, NO_NAME, B_FALSE, POOL_CHECK_NONE);
+	zfs_ioctl_register_legacy(ZFS_IOC_EVENTS_CLEAR, zfs_ioc_events_clear,
+	    zfs_secpolicy_config, NO_NAME, B_FALSE, POOL_CHECK_NONE);
 }
 
 int
@@ -5745,7 +5757,7 @@ zfsdev_ioctl(struct file *filp, unsigned cmd, unsigned long arg)
 
 
 	if (error == 0 && !(flag & FKIOCTL))
-		error = vec->zvec_secpolicy(zc, innvl, cr);
+		error = vec->zvec_secpolicy(zc, innvl, CRED());
 
 	if (error != 0)
 		goto out;
