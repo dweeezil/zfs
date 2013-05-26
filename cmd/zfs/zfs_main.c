@@ -1247,7 +1247,7 @@ zfs_do_destroy(int argc, char **argv)
 			if (cb.cb_doclones)
 				err = destroy_clones(&cb);
 			if (err == 0) {
-				err = zfs_destroy_snaps_nvl(zhp, cb.cb_nvl,
+				err = zfs_destroy_snaps_nvl(zhp->zfs_hdl, cb.cb_nvl,
 				    cb.cb_defer_destroy);
 			}
 		}
