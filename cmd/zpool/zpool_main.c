@@ -4897,19 +4897,19 @@ get_history_one(zpool_handle_t *zhp, void *data)
 			}
 			(void) printf("%s [internal %s txg:%lld] %s", tbuf,
 			    zfs_history_event_names[ievent],
-			    fnvlist_lookup_uint64(rec, ZPOOL_HIST_TXG),
+			    (long long int)fnvlist_lookup_uint64(rec, ZPOOL_HIST_TXG),
 			    fnvlist_lookup_string(rec, ZPOOL_HIST_INT_STR));
 		} else if (nvlist_exists(rec, ZPOOL_HIST_INT_NAME)) {
 			if (!cb->internal)
 				continue;
 			(void) printf("%s [txg:%lld] %s", tbuf,
-			    fnvlist_lookup_uint64(rec, ZPOOL_HIST_TXG),
+			    (long long int)fnvlist_lookup_uint64(rec, ZPOOL_HIST_TXG),
 			    fnvlist_lookup_string(rec, ZPOOL_HIST_INT_NAME));
 			if (nvlist_exists(rec, ZPOOL_HIST_DSNAME)) {
 				(void) printf(" %s (%llu)",
 				    fnvlist_lookup_string(rec,
 				    ZPOOL_HIST_DSNAME),
-				    fnvlist_lookup_uint64(rec,
+				    (long long unsigned int)fnvlist_lookup_uint64(rec,
 				    ZPOOL_HIST_DSID));
 			}
 			(void) printf(" %s", fnvlist_lookup_string(rec,
