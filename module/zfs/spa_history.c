@@ -261,7 +261,7 @@ spa_history_log_sync(void *arg1, void *arg2, dmu_tx_t *tx)
 		    fnvlist_lookup_string(nvl, ZPOOL_HIST_IOCTL));
 	}
 
-	record_packed = fnvlist_pack(nvl, &reclen);
+	record_packed = fnvlist_pack_nosleep(nvl, &reclen);
 
 	mutex_enter(&spa->spa_history_lock);
 

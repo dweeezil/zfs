@@ -92,6 +92,15 @@ fnvlist_pack(nvlist_t *nvl, size_t *sizep)
 	return (packed);
 }
 
+char *
+fnvlist_pack_nosleep(nvlist_t *nvl, size_t *sizep)
+{
+	char *packed = 0;
+	VERIFY3U(nvlist_pack(nvl, &packed, sizep, NV_ENCODE_NATIVE,
+	    KM_NOSLEEP), ==, 0);
+	return (packed);
+}
+
 /*ARGSUSED*/
 void
 fnvlist_pack_free(char *pack, size_t size)
@@ -112,6 +121,14 @@ fnvlist_unpack(char *buf, size_t buflen)
 }
 
 nvlist_t *
+fnvlist_unpack_nosleep(char *buf, size_t buflen)
+{
+	nvlist_t *rv;
+	VERIFY3U(nvlist_unpack(buf, buflen, &rv, KM_NOSLEEP), ==, 0);
+	return (rv);
+}
+
+nvlist_t *
 fnvlist_dup(nvlist_t *nvl)
 {
 	nvlist_t *rv;
@@ -119,10 +136,24 @@ fnvlist_dup(nvlist_t *nvl)
 	return (rv);
 }
 
+nvlist_t *
+fnvlist_dup_nosleep(nvlist_t *nvl)
+{
+	nvlist_t *rv;
+	VERIFY3U(nvlist_dup(nvl, &rv, KM_NOSLEEP), ==, 0);
+	return (rv);
+}
+
 void
 fnvlist_merge(nvlist_t *dst, nvlist_t *src)
 {
 	VERIFY0(nvlist_merge(dst, src, KM_SLEEP));
+}
+
+void
+fnvlist_merge_nosleep(nvlist_t *dst, nvlist_t *src)
+{
+	VERIFY3U(nvlist_merge(dst, src, KM_NOSLEEP), ==, 0);
 }
 
 void
@@ -513,10 +544,13 @@ EXPORT_SYMBOL(fnvlist_alloc_nosleep);
 EXPORT_SYMBOL(fnvlist_free);
 EXPORT_SYMBOL(fnvlist_size);
 EXPORT_SYMBOL(fnvlist_pack);
+EXPORT_SYMBOL(fnvlist_pack_nosleep);
 EXPORT_SYMBOL(fnvlist_pack_free);
 EXPORT_SYMBOL(fnvlist_unpack);
+EXPORT_SYMBOL(fnvlist_unpack_nosleep);
 EXPORT_SYMBOL(fnvlist_dup);
-EXPORT_SYMBOL(fnvlist_merge);
+EXPORT_SYMBOL(fnvlist_dup_nosleep);
+EXPORT_SYMBOL(fnvlist_merge_nosleep);
 
 EXPORT_SYMBOL(fnvlist_add_nvpair);
 EXPORT_SYMBOL(fnvlist_add_boolean);
