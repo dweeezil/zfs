@@ -315,7 +315,7 @@ spa_history_log_nvl(spa_t *spa, nvlist_t *nvl)
 		return (err);
 	}
 
-	nvarg = fnvlist_dup(nvl);
+	nvarg = fnvlist_dup_nosleep(nvl);
 	if (spa_history_zone() != NULL) {
 		fnvlist_add_string(nvarg, ZPOOL_HIST_ZONE,
 		    spa_history_zone());
