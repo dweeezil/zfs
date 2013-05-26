@@ -445,7 +445,7 @@ log_internal(nvlist_t *nvl, const char *operation, spa_t *spa,
 	if (tx->tx_txg == TXG_INITIAL)
 		return;
 
-	msg = kmem_alloc(vsnprintf(NULL, 0, fmt, adx) + 1, KM_SLEEP);
+	msg = kmem_alloc(vsnprintf(NULL, 0, fmt, adx) + 1, KM_PUSHPAGE);
 	(void) vsprintf(msg, fmt, adx);
 	fnvlist_add_string(nvl, ZPOOL_HIST_INT_STR, msg);
 	strfree(msg);
