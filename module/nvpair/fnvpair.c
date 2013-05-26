@@ -550,6 +550,7 @@ EXPORT_SYMBOL(fnvlist_unpack);
 EXPORT_SYMBOL(fnvlist_unpack_nosleep);
 EXPORT_SYMBOL(fnvlist_dup);
 EXPORT_SYMBOL(fnvlist_dup_nosleep);
+EXPORT_SYMBOL(fnvlist_merge);
 EXPORT_SYMBOL(fnvlist_merge_nosleep);
 
 EXPORT_SYMBOL(fnvlist_add_nvpair);
