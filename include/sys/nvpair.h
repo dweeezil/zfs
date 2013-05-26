@@ -277,6 +277,7 @@ int nvpair_value_double(nvpair_t *, double *);
 #endif
 
 nvlist_t *fnvlist_alloc(void);
+nvlist_t *fnvlist_alloc_nosleep(void);
 void fnvlist_free(nvlist_t *);
 size_t fnvlist_size(nvlist_t *);
 char *fnvlist_pack(nvlist_t *, size_t *);
