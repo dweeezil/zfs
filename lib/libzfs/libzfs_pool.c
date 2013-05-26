@@ -3599,8 +3599,10 @@ zpool_upgrade(zpool_handle_t *zhp, uint64_t new_version)
 void
 zfs_save_arguments(int argc, char **argv, char *string, int len)
 {
+	int i;
+
 	(void) strlcpy(string, basename(argv[0]), len);
-	for (int i = 1; i < argc; i++) {
+	for (i = 1; i < argc; i++) {
 		(void) strlcat(string, " ", len);
 		(void) strlcat(string, argv[i], len);
 	}

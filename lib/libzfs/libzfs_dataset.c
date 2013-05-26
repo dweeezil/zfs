@@ -3189,46 +3189,50 @@ zfs_destroy_snaps(zfs_handle_t *zhp, char *snapname, boolean_t defer)
 		    dgettext(TEXT_DOMAIN, "cannot destroy '%s@%s'"),
 		    zhp->zfs_name, snapname);
 	} else {
-		ret = zfs_destroy_snaps_nvl(zhp, dd.nvl, defer);
+		ret = zfs_destroy_snaps_nvl(zhp->zfs_hdl, dd.nvl, defer);
 	}
 	nvlist_free(dd.nvl);
 	return (ret);
 }
 
 /*
- * Destroys all the snapshots named in the nvlist.  They must be underneath
- * the zhp (either snapshots of it, or snapshots of its descendants).
+ * Destroys all the snapshots named in the nvlist.
  */
 int
-zfs_destroy_snaps_nvl(zfs_handle_t *zhp, nvlist_t *snaps, boolean_t defer)
+zfs_destroy_snaps_nvl(libzfs_handle_t *hdl, nvlist_t *snaps, boolean_t defer)
 {
 	int ret;
 	nvlist_t *errlist;
+	nvpair_t *pair;
 
 	ret = lzc_destroy_snaps(snaps, defer, &errlist);
 
-	ret = zfs_ioctl(zhp->zfs_hdl, ZFS_IOC_DESTROY_SNAPS_NVL, &zc);
-	if (ret != 0) {
-		for (nvpair_t *pair = nvlist_next_nvpair(errlist, NULL);
-		    pair != NULL; pair = nvlist_next_nvpair(errlist, pair)) {
-			char errbuf[1024];
-			(void) snprintf(errbuf, sizeof (errbuf),
-			    dgettext(TEXT_DOMAIN, "cannot destroy snapshot %s"),
-			    nvpair_name(pair));
+	if (ret == 0)
+		return (0);
 
-			switch (fnvpair_value_int32(pair)) {
-			case EEXIST:
-				zfs_error_aux(zhp->zfs_hdl,
-				    dgettext(TEXT_DOMAIN,
-				    "snapshot is cloned"));
-				ret = zfs_error(zhp->zfs_hdl, EZFS_EXISTS,
-				    errbuf);
-				break;
-			default:
-				ret = zfs_standard_error(zhp->zfs_hdl, errno,
-				    errbuf);
-				break;
-			}
+	if (nvlist_next_nvpair(errlist, NULL) == NULL) {
+		char errbuf[1024];
+		(void) snprintf(errbuf, sizeof (errbuf),
+		    dgettext(TEXT_DOMAIN, "cannot destroy snapshots"));
+
+		ret = zfs_standard_error(hdl, ret, errbuf);
+	}
+	for (pair = nvlist_next_nvpair(errlist, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(errlist, pair)) {
+		char errbuf[1024];
+		(void) snprintf(errbuf, sizeof (errbuf),
+		    dgettext(TEXT_DOMAIN, "cannot destroy snapshot %s"),
+		    nvpair_name(pair));
+
+		switch (fnvpair_value_int32(pair)) {
+		case EEXIST:
+			zfs_error_aux(hdl,
+			    dgettext(TEXT_DOMAIN, "snapshot is cloned"));
+			ret = zfs_error(hdl, EZFS_EXISTS, errbuf);
+			break;
+		default:
+			ret = zfs_standard_error(hdl, errno, errbuf);
+			break;
 		}
 	}
 
@@ -3541,6 +3545,7 @@ zfs_snapshot_nvl(libzfs_handle_t *hdl, nvlist_t *snaps, nvlist_t *props)
 			    "cannot create snapshot '%s'"), snapname);
 			return (zfs_error(hdl, EZFS_INVALIDNAME, errbuf));
 		}
+	}
 
 	if (props != NULL &&
 	    (props = zfs_valid_proplist(hdl, ZFS_TYPE_SNAPSHOT,
@@ -3599,7 +3604,6 @@ zfs_snapshot(libzfs_handle_t *hdl, const char *path, boolean_t recursive,
 	if (!zfs_validate_name(hdl, path, ZFS_TYPE_SNAPSHOT, B_TRUE))
 		return (zfs_error(hdl, EZFS_INVALIDNAME, errbuf));
  
-
 	(void) strlcpy(fsname, path, sizeof (fsname));
 	cp = strchr(fsname, '@');
 	*cp = '\0';
@@ -3622,7 +3626,7 @@ zfs_snapshot(libzfs_handle_t *hdl, const char *path, boolean_t recursive,
 	if (ret == 0 && recursive) {
 		struct createdata cd;
 
-		cd.cd_snapname = delim + 1;
+		cd.cd_snapname = cp + 1;	/* XXXTSC - must make sure that cp is the right thing here */
 		cd.cd_ifexists = B_FALSE;
 		(void) zfs_iter_filesystems(zhp, zfs_create_link_cb, &cd);
 	}
