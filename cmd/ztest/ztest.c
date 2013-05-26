@@ -2409,7 +2409,7 @@ ztest_spa_upgrade(ztest_ds_t *zd, uint64_t id)
 	props = fnvlist_alloc();
 	fnvlist_add_uint64(props,
 	    zpool_prop_to_name(ZPOOL_PROP_VERSION), version);
-	VERIFY3S(spa_create(name, nvroot, props, NULL, NULL), ==, 0);
+	VERIFY3S(spa_create(name, nvroot, props, NULL), ==, 0);
 	fnvlist_free(nvroot);
 	fnvlist_free(props);
 
