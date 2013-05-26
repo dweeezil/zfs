@@ -290,7 +290,7 @@ int
 spa_history_log(spa_t *spa, const char *msg)
 {
 	int err;
-	nvlist_t *nvl = fnvlist_alloc();
+	nvlist_t *nvl = fnvlist_alloc_nosleep();
 
 	fnvlist_add_string(nvl, ZPOOL_HIST_CMD, msg);
 	err = spa_history_log_nvl(spa, nvl);
@@ -479,7 +479,7 @@ spa_history_log_internal(spa_t *spa, const char *operation,
 	}
 
 	va_start(adx, fmt);
-	log_internal(fnvlist_alloc(), operation, spa, htx, fmt, adx);
+	log_internal(fnvlist_alloc_nosleep(), operation, spa, htx, fmt, adx);
 	va_end(adx);
 
 	/* if we didn't get a tx from the caller, commit the one we made */
@@ -493,7 +493,7 @@ spa_history_log_internal_ds(dsl_dataset_t *ds, const char *operation,
 {
 	va_list adx;
 	char namebuf[MAXNAMELEN];
-	nvlist_t *nvl = fnvlist_alloc();
+	nvlist_t *nvl = fnvlist_alloc_nosleep();
 
 	ASSERT(tx != NULL);
 
@@ -512,7 +512,7 @@ spa_history_log_internal_dd(dsl_dir_t *dd, const char *operation,
 {
 	va_list adx;
 	char namebuf[MAXNAMELEN];
-	nvlist_t *nvl = fnvlist_alloc();
+	nvlist_t *nvl = fnvlist_alloc_nosleep();
 
 	ASSERT(tx != NULL);
 

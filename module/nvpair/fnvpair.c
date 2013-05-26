@@ -54,6 +54,17 @@ fnvlist_alloc(void)
 	return (nvl);
 }
 
+/*
+ *  Same as fnvlist_alloc but allocates with KM_NOSLEEP.
+ */
+nvlist_t *
+fnvlist_alloc_nosleep(void)
+{
+	nvlist_t *nvl;
+	VERIFY3U(nvlist_alloc(&nvl, NV_UNIQUE_NAME, KM_NOSLEEP), ==, 0);
+	return (nvl);
+}
+
 void
 fnvlist_free(nvlist_t *nvl)
 {
@@ -498,6 +509,7 @@ fnvpair_value_nvlist(nvpair_t *nvp)
 #if defined(_KERNEL) && defined(HAVE_SPL)
 
 EXPORT_SYMBOL(fnvlist_alloc);
+EXPORT_SYMBOL(fnvlist_alloc_nosleep);
 EXPORT_SYMBOL(fnvlist_free);
 EXPORT_SYMBOL(fnvlist_size);
 EXPORT_SYMBOL(fnvlist_pack);
