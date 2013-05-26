@@ -156,13 +156,9 @@ int nvlist_alloc(nvlist_t **, uint_t, int);
 void nvlist_free(nvlist_t *);
 int nvlist_size(nvlist_t *, size_t *, int);
 int nvlist_pack(nvlist_t *, char **, size_t *, int, int);
-int nvlist_pack_nosleep(nvlist_t *, char **, size_t *, int, int);
 int nvlist_unpack(char *, size_t, nvlist_t **, int);
-int nvlist_unpack_nosleep(char *, size_t, nvlist_t **, int);
 int nvlist_dup(nvlist_t *, nvlist_t **, int);
-int nvlist_dup_nosleep(nvlist_t *, nvlist_t **, int);
 int nvlist_merge(nvlist_t *, nvlist_t *, int);
-int nvlist_merge_nosleep(nvlist_t *, nvlist_t *, int);
 
 uint_t nvlist_nvflag(nvlist_t *);
 
@@ -286,10 +282,14 @@ nvlist_t *fnvlist_alloc_nosleep(void);
 void fnvlist_free(nvlist_t *);
 size_t fnvlist_size(nvlist_t *);
 char *fnvlist_pack(nvlist_t *, size_t *);
+char *fnvlist_pack_nosleep(nvlist_t *, size_t *);
 void fnvlist_pack_free(char *, size_t);
 nvlist_t *fnvlist_unpack(char *, size_t);
+nvlist_t *fnvlist_unpack_nosleep(char *, size_t);
 nvlist_t *fnvlist_dup(nvlist_t *);
+nvlist_t *fnvlist_dup_nosleep(nvlist_t *);
 void fnvlist_merge(nvlist_t *, nvlist_t *);
+void fnvlist_merge_nosleep(nvlist_t *, nvlist_t *);
 
 void fnvlist_add_boolean(nvlist_t *, const char *);
 void fnvlist_add_boolean_value(nvlist_t *, const char *, boolean_t);
