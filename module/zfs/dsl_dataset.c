@@ -3924,9 +3924,6 @@ dsl_dataset_user_release_sync(void *arg1, void *tag, dmu_tx_t *tx)
 		/* We already did the destroy_check */
 		dsl_dataset_destroy_sync(&dsda, tag, tx);
 	}
-
-	spa_history_log_internal_ds(ds, "release", tx,
-	    "tag = %s refs now = %lld", ra->htag, (longlong_t)refs);
 }
 
 static int
