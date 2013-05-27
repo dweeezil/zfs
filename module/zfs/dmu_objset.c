@@ -908,7 +908,7 @@ snapshot_one_impl(const char *snapname, void *arg)
 	int err;
 
 	fsname = kmem_zalloc(MAXPATHLEN, KM_PUSHPAGE);
-	(void) strlcpy(fsname, snapname, sizeof (fsname));
+	(void) strlcpy(fsname, snapname, MAXPATHLEN);
 	strchr(fsname, '@')[0] = '\0';
 
 	err = dmu_objset_hold(fsname, saa, &os);
