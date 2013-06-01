@@ -4591,13 +4591,6 @@ upgrade_cb(zpool_handle_t *zhp, void *arg)
 			return (ret);
 		printnl = B_TRUE;
 
-#if 0
-		/*
-		 * XXX: This code can be enabled when Illumos commit
-		 * 4445fffbbb1ea25fd0e9ea68b9380dd7a6709025 is merged.
-		 * It reworks the history logging among other things.
-		 */
-
 		/*
 		 * If they did "zpool upgrade -a", then we could
 		 * be doing ioctls to different pools.  We need
@@ -4606,7 +4599,6 @@ upgrade_cb(zpool_handle_t *zhp, void *arg)
 		 */
 		(void) zpool_log_history(g_zfs, history_str);
 		log_history = B_FALSE;
-#endif
 	}
 
 	if (cbp->cb_version >= SPA_VERSION_FEATURES) {
