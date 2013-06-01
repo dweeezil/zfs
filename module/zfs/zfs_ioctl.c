@@ -5954,6 +5954,7 @@ _fini(void)
 
 	tsd_destroy(&zfs_fsyncer_key);
 	tsd_destroy(&rrw_tsd_key);
+	tsd_destroy(&zfs_allow_log_key);
 
 	printk(KERN_NOTICE "ZFS: Unloaded module v%s-%s%s\n",
 	       ZFS_META_VERSION, ZFS_META_RELEASE, ZFS_DEBUG_STR);
