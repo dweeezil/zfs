@@ -3626,7 +3626,7 @@ zfs_snapshot(libzfs_handle_t *hdl, const char *path, boolean_t recursive,
 	if (ret == 0 && recursive) {
 		struct createdata cd;
 
-		cd.cd_snapname = cp + 1;	/* XXXTSC - must make sure that cp is the right thing here */
+		cd.cd_snapname = cp + 1;
 		cd.cd_ifexists = B_FALSE;
 		(void) zfs_iter_filesystems(zhp, zfs_create_link_cb, &cd);
 	}
