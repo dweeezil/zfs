@@ -3620,33 +3620,10 @@ zfs_snapshot(libzfs_handle_t *hdl, const char *path, boolean_t recursive,
 	} else {
 		fnvlist_add_boolean(sd.sd_nvl, path);
 	}
+
 	ret = zfs_snapshot_nvl(hdl, sd.sd_nvl, props);
 	nvlist_free(sd.sd_nvl);
-
-	if (ret == 0 && recursive) {
-		struct createdata cd;
-
-		cd.cd_snapname = cp + 1;
-		cd.cd_ifexists = B_FALSE;
-		(void) zfs_iter_filesystems(zhp, zfs_create_link_cb, &cd);
-	}
-	if (ret == 0 && zhp->zfs_type == ZFS_TYPE_VOLUME) {
-		ret = zvol_create_link(zhp->zfs_hdl, path);
-		if (ret != 0) {
-			(void) zfs_standard_error(hdl, errno,
-			    dgettext(TEXT_DOMAIN,
-			    "Volume successfully snapshotted, but device links "
-			    "were not created"));
-			zfs_close(zhp);
-			return (-1);
-		}
-	}
-
-	if (ret != 0)
-		(void) zfs_standard_error(hdl, errno, errbuf);
-
 	zfs_close(zhp);
-
 	return (ret);
 }
 
