@@ -3580,6 +3580,31 @@ zfs_snapshot_nvl(libzfs_handle_t *hdl, nvlist_t *snaps, nvlist_t *props)
 				(void) zfs_standard_error(hdl, ret, errbuf);
 			}
 		}
+	} else {
+		zfs_handle_t *zhp;
+		int linktries = 0, linkok = 0, linkfail = 0;
+		nvpair_t *snap;
+
+		for (snap = nvlist_next_nvpair(snaps, NULL); snap != NULL;
+		    snap = nvlist_next_nvpair(snaps, snap)) {
+			char *cp, *snapname;
+
+			snapname = nvpair_name(snap);
+			cp = strchr(snapname, '@');
+			*cp = '\0';
+
+			if ((zhp = zfs_open(hdl, snapname, ZFS_TYPE_FILESYSTEM |
+				ZFS_TYPE_VOLUME)) != NULL) {
+				if (zhp->zfs_type == ZFS_TYPE_VOLUME) {
+					++linktries;
+					*cp = '@';
+					if (zvol_create_link(zhp->zfs_hdl, nvpair_name(snap)))
+						++linkfail;
+					else
+						++linkok;
+				}
+			}
+		}
 	}
 
 	nvlist_free(props);
