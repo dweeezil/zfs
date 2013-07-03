@@ -1109,7 +1109,7 @@ dsl_dataset_destroy(dsl_dataset_t *ds, void *tag, boolean_t defer)
 	 */
 	if (ds->ds_phys->ds_bp.blk_fill == 0 &&
 	    dmu_objset_userused_enabled(os)) {
-		uint64_t count;
+		ASSERTV(uint64_t count);
 
 		ASSERT(zap_count(os, DMU_USERUSED_OBJECT, &count) != 0 ||
 		    count == 0);
