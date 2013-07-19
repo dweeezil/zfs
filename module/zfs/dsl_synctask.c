@@ -234,9 +234,6 @@ dsl_sync_task_do_nowait(dsl_pool_t *dp,
 {
 	dsl_sync_task_group_t *dstg;
 
-	if (!spa_writeable(dp->dp_spa))
-		return;
-
 	dstg = dsl_sync_task_group_create(dp);
 	dsl_sync_task_create(dstg, checkfunc, syncfunc,
 	    arg1, arg2, blocks_modified);
