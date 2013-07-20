@@ -1061,26 +1061,26 @@ dsl_dataset_destroy(dsl_dataset_t *ds, void *tag, boolean_t defer)
 
 	dd = ds->ds_dir;
 
-	/*
-	 * Check for errors and mark this ds as inconsistent, in
-	 * case we crash while freeing the objects.
-	 */
-	err = dsl_sync_task_do(dd->dd_pool, dsl_dataset_destroy_begin_check,
-	    dsl_dataset_destroy_begin_sync, ds, NULL, 0);
-	if (err)
-		goto out;
-
-	err = dmu_objset_from_ds(ds, &os);
-	if (err)
-		goto out;
-
-	/*
-	 * If async destruction is not enabled try to remove all objects
-	 * while in the open context so that there is less work to do in
-	 * the syncing context.
-	 */
 	if (!spa_feature_is_enabled(dsl_dataset_get_spa(ds),
 	    &spa_feature_table[SPA_FEATURE_ASYNC_DESTROY])) {
+		/*
+		 * Check for errors and mark this ds as inconsistent, in
+		 * case we crash while freeing the objects.
+		 */
+		err = dsl_sync_task_do(dd->dd_pool,
+		    dsl_dataset_destroy_begin_check,
+		    dsl_dataset_destroy_begin_sync, ds, NULL, 0);
+		if (err)
+			goto out;
+
+		err = dmu_objset_from_ds(ds, &os);
+		if (err)
+			goto out;
+
+		/*
+		 * Remove all objects while in the open context so that
+		 * there is less work to do in the syncing context.
+		 */
 		for (obj = 0; err == 0; err = dmu_object_next(os, &obj, FALSE,
 		    ds->ds_phys->ds_prev_snap_txg)) {
 			/*
@@ -1091,30 +1091,25 @@ dsl_dataset_destroy(dsl_dataset_t *ds, void *tag, boolean_t defer)
 		}
 		if (err != ESRCH)
 			goto out;
-	}
 
-	/*
-	 * Only the ZIL knows how to free log blocks.
-	 */
-	zil_destroy(dmu_objset_zil(os), B_FALSE);
+		/*
+		 * Sync out all in-flight IO.
+		 */
+		txg_wait_synced(dd->dd_pool, 0);
 
-	/*
-	 * Sync out all in-flight IO.
-	 */
-	txg_wait_synced(dd->dd_pool, 0);
+		/*
+		 * If we managed to free all the objects in open
+		 * context, the user space accounting should be zero.
+		 */
+		if (ds->ds_phys->ds_bp.blk_fill == 0 &&
+		    dmu_objset_userused_enabled(os)) {
+			ASSERTV(uint64_t count);
 
-	/*
-	 * If we managed to free all the objects in open
-	 * context, the user space accounting should be zero.
-	 */
-	if (ds->ds_phys->ds_bp.blk_fill == 0 &&
-	    dmu_objset_userused_enabled(os)) {
-		ASSERTV(uint64_t count);
-
-		ASSERT(zap_count(os, DMU_USERUSED_OBJECT, &count) != 0 ||
-		    count == 0);
-		ASSERT(zap_count(os, DMU_GROUPUSED_OBJECT, &count) != 0 ||
-		    count == 0);
+			ASSERT(zap_count(os, DMU_USERUSED_OBJECT,
+			    &count) != 0 || count == 0);
+			ASSERT(zap_count(os, DMU_GROUPUSED_OBJECT,
+			    &count) != 0 || count == 0);
+		}
 	}
 
 	rw_enter(&dd->dd_pool->dp_config_rwlock, RW_READER);
@@ -1169,6 +1164,7 @@ dsl_dataset_destroy(dsl_dataset_t *ds, void *tag, boolean_t defer)
 	/* if it is successful, dsl_dir_destroy_sync will close the dd */
 	if (err)
 		dsl_dir_close(dd, FTAG);
+
 out:
 	dsl_dataset_disown(ds, tag);
 	return (err);

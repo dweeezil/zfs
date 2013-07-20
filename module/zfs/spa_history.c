@@ -305,7 +305,7 @@ spa_history_log_nvl(spa_t *spa, nvlist_t *nvl)
 	dmu_tx_t *tx;
 	nvlist_t *nvarg;
 
-	if (spa_version(spa) < SPA_VERSION_ZPOOL_HISTORY)
+	if (spa_version(spa) < SPA_VERSION_ZPOOL_HISTORY || !spa_writeable(spa))
 		return (EINVAL);
 
 	tx = dmu_tx_create_dd(spa_get_dsl(spa)->dp_mos_dir);
@@ -442,9 +442,12 @@ log_internal(nvlist_t *nvl, const char *operation, spa_t *spa,
 	/*
 	 * If this is part of creating a pool, not everything is
 	 * initialized yet, so don't bother logging the internal events.
+	 * Likewise if the pool is not writeable.
 	 */
-	if (tx->tx_txg == TXG_INITIAL)
+	if (tx->tx_txg == TXG_INITIAL || !spa_writeable(spa)) {
+		fnvlist_free(nvl);
 		return;
+	}
 
 	va_copy(adx1, adx);
 	msg = kmem_alloc(vsnprintf(NULL, 0, fmt, adx1) + 1, KM_PUSHPAGE);
