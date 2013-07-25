@@ -287,6 +287,9 @@ typedef int krw_t;
 #undef RW_LOCK_HELD
 #define	RW_LOCK_HELD(x)		(RW_READ_HELD(x) || RW_WRITE_HELD(x))
 
+#undef RW_LOCK_HELD
+#define	RW_LOCK_HELD(x)		(RW_READ_HELD(x) || RW_WRITE_HELD(x))
+
 extern void rw_init(krwlock_t *rwlp, char *name, int type, void *arg);
 extern void rw_destroy(krwlock_t *rwlp);
 extern void rw_enter(krwlock_t *rwlp, krw_t rw);
@@ -322,6 +325,14 @@ extern void cv_broadcast(kcondvar_t *cv);
 #define cv_timedwait_interruptible(cv, mp, at)	cv_timedwait(cv, mp, at)
 #define cv_wait_interruptible(cv, mp)		cv_wait(cv, mp)
 #define cv_wait_io(cv, mp)			cv_wait(cv, mp)
+
+/*
+ * Thread-specific data
+ */
+#define	tsd_get(k) pthread_getspecific(k)
+#define	tsd_set(k, v) pthread_setspecific(k, v)
+#define	tsd_create(kp, d) pthread_key_create(kp, d)
+#define	tsd_destroy(kp) /* nothing */
 
 /*
  * Thread-specific data
