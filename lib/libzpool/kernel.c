@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 #include <sys/processor.h>
 #include <sys/zfs_context.h>
-#include <rrwlock.h>
+#include <sys/rrwlock.h>
 #include <sys/utsname.h>
 #include <sys/time.h>
 #include <sys/systeminfo.h>

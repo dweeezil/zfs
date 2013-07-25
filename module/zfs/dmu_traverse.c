@@ -523,14 +523,14 @@ traverse_impl(spa_t *spa, dsl_dataset_t *ds, uint64_t objset, blkptr_t *rootbp,
 		objset_phys_t *osp;
 		arc_buf_t *buf;
 
-		err = arc_read(NULL, td.td_spa, rootbp,
+		err = arc_read(NULL, td->td_spa, rootbp,
 		    arc_getbuf_func, &buf,
 		    ZIO_PRIORITY_ASYNC_READ, ZIO_FLAG_CANFAIL, &flags, NULL);
 		if (err != 0)
 			return (err);
 
 		osp = buf->b_data;
-		traverse_zil(&td, &osp->os_zil_header);
+		traverse_zil(td, &osp->os_zil_header);
 		(void) arc_buf_remove_ref(buf, &buf);
 	}
 

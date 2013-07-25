@@ -260,7 +260,6 @@ dsl_deleg_check(void *arg, dmu_tx_t *tx)
 
 	if (spa_version(dmu_tx_pool(tx)->dp_spa) <
 	    SPA_VERSION_DELEGATED_PERMS) {
-		dsl_dir_close(dd, FTAG);
 		return (ENOTSUP);
 	}
 
@@ -356,10 +355,10 @@ dsl_deleg_get(const char *ddname, nvlist_t **nvp)
 			for (zap_cursor_init(zc, mos, baseza->za_first_integer);
 			    zap_cursor_retrieve(zc, za) == 0;
 			    zap_cursor_advance(zc)) {
-				fnvlist_add_boolean(perms_nvp, za.za_name);
+				fnvlist_add_boolean(perms_nvp, za->za_name);
 			}
 			zap_cursor_fini(zc);
-			fnvlist_add_nvlist(sp_nvp, baseza.za_name, perms_nvp);
+			fnvlist_add_nvlist(sp_nvp, baseza->za_name, perms_nvp);
 			fnvlist_free(perms_nvp);
 		}
 

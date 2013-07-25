@@ -1687,15 +1687,18 @@ static int
 dmu_recv_existing_end(dmu_recv_cookie_t *drc)
 {
 	int error;
-	char name[MAXNAMELEN];
 
 #ifdef _KERNEL
+	char *name[MAXNAMELEN];
+
 	/*
 	 * We will be destroying the ds; make sure its origin is unmounted if
 	 * necessary.
 	 */
+	name = kmem_alloc(MAXNAMELEN, KM_SLEEP);
 	dsl_dataset_name(drc->drc_ds, name);
 	zfs_destroy_unmount_origin(name);
+	kmem_free(name, MAXNAMELEN);
 #endif
 
 	error = dsl_sync_task(drc->drc_tofs,

@@ -1617,6 +1617,7 @@ dmu_objset_find_impl(spa_t *spa, const char *name,
 	if (err != 0) {
 		dsl_pool_config_exit(dp, FTAG);
 		return (err);
+	}
 
 	/* Don't visit hidden ($MOS & $ORIGIN) objsets. */
 	if (dd->dd_myname[0] == '$') {
