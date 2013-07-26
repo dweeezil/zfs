@@ -118,7 +118,7 @@ static int
 lzc_ioctl(zfs_ioc_t ioc, const char *name,
     nvlist_t *source, nvlist_t **resultp)
 {
-	zfs_cmd_t zc = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+	zfs_cmd_t zc = {"\0"};
 	int error = 0;
 	char *packed;
 	size_t size;
@@ -325,7 +325,7 @@ lzc_exists(const char *dataset)
 	 * The objset_stats ioctl is still legacy, so we need to construct our
 	 * own zfs_cmd_t rather than using zfsc_ioctl().
 	 */
-	zfs_cmd_t zc = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+	zfs_cmd_t zc = {"\0"};
 
 	(void) strlcpy(zc.zc_name, dataset, sizeof (zc.zc_name));
 	return (ioctl(g_fd, ZFS_IOC_OBJSET_STATS, &zc) == 0);
@@ -505,7 +505,7 @@ lzc_receive(const char *snapname, nvlist_t *props, const char *origin,
 	 * The receive ioctl is still legacy, so we need to construct our own
 	 * zfs_cmd_t rather than using zfsc_ioctl().
 	 */
-	zfs_cmd_t zc = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+	zfs_cmd_t zc = {"\0"};
 	char *atp;
 	char *packed = NULL;
 	size_t size;
