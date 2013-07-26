@@ -164,6 +164,7 @@ dsl_deleg_set_sync(void *arg, dmu_tx_t *tx)
 
 	VERIFY0(dsl_dir_hold(dp, dda->dda_name, FTAG, &dd, NULL));
 
+	zapobj = dd->dd_phys->dd_deleg_zapobj;
 	if (zapobj == 0) {
 		dmu_buf_will_dirty(dd->dd_dbuf, tx);
 		zapobj = dd->dd_phys->dd_deleg_zapobj = zap_create(mos,

@@ -377,37 +377,6 @@ dsl_prop_predict(dsl_dir_t *dd, const char *propname,
 	return (err);
 }
 
-dsl_prop_check_prediction(dsl_dir_t *dd, dsl_prop_setarg_t *psa)
-{
-	zfs_prop_t prop = zfs_name_to_prop(psa->psa_name);
-	uint64_t intval;
-	char setpoint[MAXNAMELEN];
-	uint64_t version = spa_version(dd->dd_pool->dp_spa);
-	int err;
-
-	if (version < SPA_VERSION_RECVD_PROPS) {
-		switch (prop) {
-		case ZFS_PROP_QUOTA:
-		case ZFS_PROP_RESERVATION:
-			return;
-		default:
-			break;
-		}
-	}
-
-	err = dsl_prop_get_dd(dd, psa->psa_name, 8, 1, &intval,
-	    setpoint, B_FALSE);
-	if (err == 0 && intval != psa->psa_effective_value) {
-		cmn_err(CE_PANIC, "%s property, source: %x, "
-		    "predicted effective value: %llu, "
-		    "actual effective value: %llu (setpoint: %s)",
-		    psa->psa_name, psa->psa_source,
-		    (unsigned long long)psa->psa_effective_value,
-		    (unsigned long long)intval, setpoint);
-	}
-}
-#endif
-
 /*
  * Unregister this callback.  Return 0 on success, ENOENT if ddname is
  * invalid, ENOMSG if no matching callback registered.
@@ -719,7 +688,7 @@ dsl_prop_set_sync_impl(dsl_dataset_t *ds, const char *propname,
 
 int
 dsl_prop_set_int(const char *dsname, const char *propname,
-   zprop_source_t source, uint64_t value)
+    zprop_source_t source, uint64_t value)
 {
 	nvlist_t *nvl = fnvlist_alloc();
 	int error;
@@ -732,7 +701,7 @@ dsl_prop_set_int(const char *dsname, const char *propname,
 
 int
 dsl_prop_set_string(const char *dsname, const char *propname,
-   zprop_source_t source, const char *value)
+    zprop_source_t source, const char *value)
 {
 	nvlist_t *nvl = fnvlist_alloc();
 	int error;
@@ -745,7 +714,7 @@ dsl_prop_set_string(const char *dsname, const char *propname,
 
 int
 dsl_prop_inherit(const char *dsname, const char *propname,
-   zprop_source_t source)
+    zprop_source_t source)
 {
 	nvlist_t *nvl = fnvlist_alloc();
 	int error;

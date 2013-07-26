@@ -1944,11 +1944,13 @@ checkmap(space_map_t *sm, uint64_t off, uint64_t size)
 void
 metaslab_check_free(spa_t *spa, const blkptr_t *bp)
 {
+	int i, j;
+
 	if ((zfs_flags & ZFS_DEBUG_ZIO_FREE) == 0)
 		return;
 
 	spa_config_enter(spa, SCL_VDEV, FTAG, RW_READER);
-	for (int i = 0; i < BP_GET_NDVAS(bp); i++) {
+	for (i = 0; i < BP_GET_NDVAS(bp); i++) {
 		uint64_t vdid = DVA_GET_VDEV(&bp->blk_dva[i]);
 		vdev_t *vd = vdev_lookup_top(spa, vdid);
 		uint64_t off = DVA_GET_OFFSET(&bp->blk_dva[i]);
@@ -1958,9 +1960,9 @@ metaslab_check_free(spa_t *spa, const blkptr_t *bp)
 		if (ms->ms_map->sm_loaded)
 			checkmap(ms->ms_map, off, size);
 
-		for (int j = 0; j < TXG_SIZE; j++)
+		for (j = 0; j < TXG_SIZE; j++)
 			checkmap(ms->ms_freemap[j], off, size);
-		for (int j = 0; j < TXG_DEFER_SIZE; j++)
+		for (j = 0; j < TXG_DEFER_SIZE; j++)
 			checkmap(ms->ms_defermap[j], off, size);
 	}
 	spa_config_exit(spa, SCL_VDEV, FTAG);

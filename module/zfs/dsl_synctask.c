@@ -69,7 +69,7 @@ dsl_sync_task(const char *pool, dsl_checkfunc_t *checkfunc,
 	spa_t *spa;
 	dmu_tx_t *tx;
 	int err;
-	dsl_sync_task_t dst = { 0 };
+	dsl_sync_task_t dst = { { { NULL } } };
 	dsl_pool_t *dp;
 
 	err = spa_open(pool, &spa, FTAG);
