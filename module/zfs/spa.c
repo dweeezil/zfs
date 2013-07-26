@@ -696,7 +696,7 @@ spa_prop_clear_bootfs(spa_t *spa, uint64_t dsobj, dmu_tx_t *tx)
 
 /*ARGSUSED*/
 static int
-spa_change_guid_check(void *arg1, void *arg2, dmu_tx_t *tx)
+spa_change_guid_check(void *arg, dmu_tx_t *tx)
 {
 	spa_t *spa = dmu_tx_pool(tx)->dp_spa;
 	vdev_t *rvd = spa->spa_root_vdev;
@@ -1729,7 +1729,7 @@ spa_config_valid(spa_t *spa, nvlist_t *config)
 /*
  * Check for missing log devices
  */
-static int
+static boolean_t
 spa_check_logs(spa_t *spa)
 {
 	boolean_t rv = B_FALSE;
