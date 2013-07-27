@@ -1689,7 +1689,7 @@ dmu_recv_existing_end(dmu_recv_cookie_t *drc)
 	int error;
 
 #ifdef _KERNEL
-	char *name[MAXNAMELEN];
+	char *name;
 
 	/*
 	 * We will be destroying the ds; make sure its origin is unmounted if

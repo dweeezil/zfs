@@ -173,6 +173,4 @@ dsl_sync_task_sync(dsl_sync_task_t *dst, dmu_tx_t *tx)
 		kmem_free(dst, sizeof (*dst));
 }
 #if defined(_KERNEL) && defined(HAVE_SPL)
-EXPORT_SYMBOL(dsl_sync_task_do);
-EXPORT_SYMBOL(dsl_sync_task_do_nowait);
 #endif

@@ -2886,6 +2886,7 @@ dsl_dataset_is_before(dsl_dataset_t *later, dsl_dataset_t *earlier)
 	dsl_pool_t *dp = later->ds_dir->dd_pool;
 	int error;
 	boolean_t ret;
+	dsl_dataset_t *origin;
 
 	ASSERT(dsl_pool_config_held(dp));
 
@@ -2900,7 +2901,6 @@ dsl_dataset_is_before(dsl_dataset_t *later, dsl_dataset_t *earlier)
 
 	if (later->ds_dir->dd_phys->dd_origin_obj == earlier->ds_object)
 		return (B_TRUE);
-	dsl_dataset_t *origin;
 	error = dsl_dataset_hold_obj(dp,
 	    later->ds_dir->dd_phys->dd_origin_obj, FTAG, &origin);
 	if (error != 0)
@@ -2911,7 +2911,6 @@ dsl_dataset_is_before(dsl_dataset_t *later, dsl_dataset_t *earlier)
 }
 
 #if defined(_KERNEL) && defined(HAVE_SPL)
-EXPORT_SYMBOL(dmu_snapshots_destroy_nvl);
 EXPORT_SYMBOL(dsl_dataset_hold);
 EXPORT_SYMBOL(dsl_dataset_hold_obj);
 EXPORT_SYMBOL(dsl_dataset_own);
@@ -2919,17 +2918,11 @@ EXPORT_SYMBOL(dsl_dataset_own_obj);
 EXPORT_SYMBOL(dsl_dataset_name);
 EXPORT_SYMBOL(dsl_dataset_rele);
 EXPORT_SYMBOL(dsl_dataset_disown);
-EXPORT_SYMBOL(dsl_dataset_drop_ref);
 EXPORT_SYMBOL(dsl_dataset_tryown);
-EXPORT_SYMBOL(dsl_dataset_make_exclusive);
 EXPORT_SYMBOL(dsl_dataset_create_sync);
 EXPORT_SYMBOL(dsl_dataset_create_sync_dd);
-EXPORT_SYMBOL(dsl_dataset_destroy);
-EXPORT_SYMBOL(dsl_dataset_destroy_check);
-EXPORT_SYMBOL(dsl_dataset_destroy_sync);
 EXPORT_SYMBOL(dsl_dataset_snapshot_check);
 EXPORT_SYMBOL(dsl_dataset_snapshot_sync);
-EXPORT_SYMBOL(dsl_dataset_rename);
 EXPORT_SYMBOL(dsl_dataset_promote);
 EXPORT_SYMBOL(dsl_dataset_clone_swap);
 EXPORT_SYMBOL(dsl_dataset_user_hold);
@@ -2954,8 +2947,5 @@ EXPORT_SYMBOL(dsl_dataset_space);
 EXPORT_SYMBOL(dsl_dataset_fsid_guid);
 EXPORT_SYMBOL(dsl_dsobj_to_dsname);
 EXPORT_SYMBOL(dsl_dataset_check_quota);
-EXPORT_SYMBOL(dsl_dataset_set_quota);
-EXPORT_SYMBOL(dsl_dataset_set_quota_sync);
-EXPORT_SYMBOL(dsl_dataset_set_reservation);
 EXPORT_SYMBOL(dsl_destroy_inconsistent);
 #endif

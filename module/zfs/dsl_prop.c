@@ -1131,8 +1131,6 @@ dsl_prop_nvlist_add_string(nvlist_t *nv, zfs_prop_t prop, const char *value)
 #if defined(_KERNEL) && defined(HAVE_SPL)
 EXPORT_SYMBOL(dsl_prop_register);
 EXPORT_SYMBOL(dsl_prop_unregister);
-EXPORT_SYMBOL(dsl_prop_numcb);
-EXPORT_SYMBOL(dsl_prop_set);
 EXPORT_SYMBOL(dsl_prop_get);
 EXPORT_SYMBOL(dsl_prop_get_integer);
 EXPORT_SYMBOL(dsl_prop_get_all);
