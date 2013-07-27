@@ -255,7 +255,7 @@ typedef struct znode {
  */
 #define	ZFS_ENTER(zsb) \
 	{ \
-		rrw_enter_read(&(zfsvfs)->z_teardown_lock, FTAG); \
+		rrw_enter_read(&(zsb)->z_teardown_lock, FTAG); \
 		if ((zsb)->z_unmounted) { \
 			ZFS_EXIT(zsb); \
 			return (EIO); \
