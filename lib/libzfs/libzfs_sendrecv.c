@@ -2888,7 +2888,7 @@ zfs_receive_one(libzfs_handle_t *hdl, int infd, const char *tosnap,
 	zcmd_free_nvlists(&zc);
 
 	if (err == 0 && snapprops_nvlist) {
-		zfs_cmd_t zc2 = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+		zfs_cmd_t zc2 = {"\0"};
 
 		(void) strcpy(zc2.zc_name, zc.zc_value);
 		zc2.zc_cookie = B_TRUE; /* received */
