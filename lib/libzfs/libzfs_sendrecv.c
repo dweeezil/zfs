@@ -2012,7 +2012,7 @@ again:
 			    stream_originguid, originguid)) {
 			case 1: {
 				/* promote it! */
-				zfs_cmd_t zc = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+				zfs_cmd_t zc = {"\0"};
 				nvlist_t *origin_nvfs;
 				char *origin_fsname;
 
@@ -2084,7 +2084,7 @@ again:
 			if (0 == nvlist_lookup_nvlist(stream_nvfs, "snapprops",
 			    &props) && 0 == nvlist_lookup_nvlist(props,
 			    stream_snapname, &props)) {
-				zfs_cmd_t zc = {"\0", 0, 0, 0, 0, 0, 0, 0, "\0", "\0", "\0"};
+				zfs_cmd_t zc = {"\0"};
 
 				zc.zc_cookie = B_TRUE; /* received */
 				(void) snprintf(zc.zc_name, sizeof (zc.zc_name),
