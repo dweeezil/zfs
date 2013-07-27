@@ -605,8 +605,8 @@ extern int zfs_send(zfs_handle_t *, const char *, const char *,
     sendflags_t *, int, snapfilter_cb_t, void *, nvlist_t **);
 
 extern int zfs_promote(zfs_handle_t *);
-extern int zfs_hold(zfs_handle_t *, const char *, const char *, boolean_t,
-    boolean_t, boolean_t, int, uint64_t, uint64_t);
+extern int zfs_hold(zfs_handle_t *, const char *, const char *,
+    boolean_t, boolean_t, int);
 extern int zfs_release(zfs_handle_t *, const char *, const char *, boolean_t);
 extern int zfs_get_holds(zfs_handle_t *, nvlist_t **);
 extern uint64_t zvol_volsize_to_reservation(uint64_t, nvlist_t *);
