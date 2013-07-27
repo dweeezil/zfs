@@ -489,8 +489,8 @@ zfsctl_rename_snap(zfs_sb_t *zsb, zfs_snapentry_t *sep, const char *name)
  */
 /*ARGSUSED*/
 int
-zfsctl_snapdir_rename(struct inode *sdip, char *sname,
-    struct inode *tdip, char *tname, cred_t *cr, int flags)
+zfsctl_snapdir_rename(struct inode *sdip, char *snm,
+    struct inode *tdip, char *tnm, cred_t *cr, int flags)
 {
 	zfs_sb_t *zsb = ITOZSB(sdip);
 	zfs_snapentry_t search, *sep;
@@ -506,10 +506,10 @@ zfsctl_snapdir_rename(struct inode *sdip, char *sname,
 	fsname = kmem_alloc(MAXNAMELEN, KM_SLEEP);
 
 	if (zsb->z_case == ZFS_CASE_INSENSITIVE) {
-		error = dmu_snapshot_realname(zsb->z_os, sname, real,
+		error = dmu_snapshot_realname(zsb->z_os, snm, real,
 		    MAXNAMELEN, NULL);
 		if (error == 0) {
-			sname = real;
+			snm = real;
 		} else if (error != ENOTSUP) {
 			goto out;
 		}
@@ -517,9 +517,9 @@ zfsctl_snapdir_rename(struct inode *sdip, char *sname,
 
 	dmu_objset_name(zsb->z_os, fsname);
 
-	error = zfsctl_snapshot_zname(sdip, sname, MAXNAMELEN, from);
+	error = zfsctl_snapshot_zname(sdip, snm, MAXNAMELEN, from);
 	if (error == 0)
-		error = zfsctl_snapshot_zname(tdip, tname, MAXNAMELEN, to);
+		error = zfsctl_snapshot_zname(tdip, tnm, MAXNAMELEN, to);
 	if (error == 0)
 		error = zfs_secpolicy_rename_perms(from, to, cr);
 	if (error != 0)
@@ -536,21 +536,21 @@ zfsctl_snapdir_rename(struct inode *sdip, char *sname,
 	/*
 	 * No-op when names are identical.
 	 */
-	if (strcmp(sname, tname) == 0) {
+	if (strcmp(snm, tnm) == 0) {
 		error = 0;
 		goto out;
 	}
 
 	mutex_enter(&zsb->z_ctldir_lock);
 
-	err = dsl_dataset_rename_snapshot(fsname, snm, tnm, B_FALSE);
+	error = dsl_dataset_rename_snapshot(fsname, snm, tnm, B_FALSE);
 	if (error)
 		goto out_unlock;
 
-	search.se_name = (char *)sname;
+	search.se_name = (char *)snm;
 	sep = avl_find(&zsb->z_ctldir_snaps, &search, &where);
 	if (sep)
-		zfsctl_rename_snap(zsb, sep, tname);
+		zfsctl_rename_snap(zsb, sep, tnm);
 
 out_unlock:
 	mutex_exit(&zsb->z_ctldir_lock);
