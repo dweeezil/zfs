@@ -4739,11 +4739,11 @@ ztest_dmu_snapshot_hold(ztest_ds_t *zd, uint64_t id)
 
 	dmu_objset_name(os, osname);
 
-	(void) snprintf(snapname, sizeof (snapname), "sh1_%llu", id);
+	(void) snprintf(snapname, sizeof (snapname), "sh1_%llu", (long long unsigned int)id);
 	(void) snprintf(fullname, sizeof (fullname), "%s@%s", osname, snapname);
 	(void) snprintf(clonename, sizeof (clonename),
-	    "%s/ch1_%llu", osname, id);
-	(void) snprintf(tag, sizeof (tag), "tag_%llu", id);
+	    "%s/ch1_%llu", osname, (long long unsigned int)id);
+	(void) snprintf(tag, sizeof (tag), "tag_%llu", (long long unsigned int)id);
 
 	/*
 	 * Clean up from any previous run.

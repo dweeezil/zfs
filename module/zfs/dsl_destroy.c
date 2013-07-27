@@ -888,9 +888,10 @@ dsl_destroy_head(const char *name)
 		 */
 		error = dmu_objset_own(name, DMU_OST_ANY, B_FALSE, FTAG, &os);
 		if (error == 0) {
+			uint64_t obj;
 			uint64_t prev_snap_txg =
 			    dmu_objset_ds(os)->ds_phys->ds_prev_snap_txg;
-			for (uint64_t obj = 0; error == 0;
+			for (obj = 0; error == 0;
 			    error = dmu_object_next(os, &obj, FALSE,
 			    prev_snap_txg))
 				(void) dmu_free_object(os, obj);
@@ -924,3 +925,14 @@ dsl_destroy_inconsistent(const char *dsname, void *arg)
 	}
 	return (0);
 }
+
+
+#if defined(_KERNEL) && defined(HAVE_SPL)
+EXPORT_SYMBOL(dsl_destroy_head);
+EXPORT_SYMBOL(dsl_destroy_head_sync_impl);
+EXPORT_SYMBOL(dsl_dataset_user_hold_check_one);
+EXPORT_SYMBOL(dsl_destroy_snapshot_sync_impl);
+EXPORT_SYMBOL(dsl_destroy_inconsistent);
+EXPORT_SYMBOL(dsl_dataset_user_release_tmp);
+EXPORT_SYMBOL(dsl_destroy_head_check_impl);
+#endif

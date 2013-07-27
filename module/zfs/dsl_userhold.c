@@ -421,10 +421,11 @@ void
 dsl_dataset_user_release_tmp(dsl_pool_t *dp, uint64_t dsobj, const char *htag)
 {
 	dsl_dataset_user_release_tmp_arg_t ddurta;
+
+#ifdef _KERNEL
 	dsl_dataset_t *ds;
 	int error;
 
-#ifdef _KERNEL
 	/* Make sure it is not mounted. */
 	dsl_pool_config_enter(dp, FTAG);
 	error = dsl_dataset_hold_obj(dp, dsobj, FTAG, &ds);
