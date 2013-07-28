@@ -314,7 +314,6 @@ zvol_set_volsize(const char *name, uint64_t volsize)
 	objset_t *os = NULL;
 	uint64_t readonly;
 	int error;
-	boolean_t owned = B_FALSE;
 
 	error = dsl_prop_get_integer(name,
 	    zfs_prop_to_name(ZFS_PROP_READONLY), &readonly, NULL);
@@ -1460,6 +1459,7 @@ zvol_remove_minor(const char *name)
 	return (error);
 }
 
+#if 0 /* XXXtsc */
 static int
 zvol_create_minors_cb(spa_t *spa, uint64_t dsobj,
 		      const char *dsname, void *arg)
@@ -1470,6 +1470,7 @@ zvol_create_minors_cb(spa_t *spa, uint64_t dsobj,
 	(void) __zvol_create_minor(dsname, B_FALSE);
 	return (0);
 }
+#endif
 
 /*
  * Create minors for specified pool, if pool is NULL create minors
@@ -1478,6 +1479,7 @@ zvol_create_minors_cb(spa_t *spa, uint64_t dsobj,
 int
 zvol_create_minors(const char *pool)
 {
+#if 0 /* XXXtsc */
 	spa_t *spa = NULL;
 	int error = 0;
 
@@ -1502,6 +1504,9 @@ zvol_create_minors(const char *pool)
 	mutex_exit(&zvol_state_lock);
 
 	return error;
+#else
+	return 0;
+#endif
 }
 
 /*

@@ -623,5 +623,6 @@ EXPORT_SYMBOL(fnvpair_value_int64);
 EXPORT_SYMBOL(fnvpair_value_uint64);
 EXPORT_SYMBOL(fnvpair_value_string);
 EXPORT_SYMBOL(fnvpair_value_nvlist);
+EXPORT_SYMBOL(fnvlist_num_pairs);
 
 #endif

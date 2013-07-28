@@ -195,8 +195,6 @@ uint64_t dsl_dataset_create_sync_dd(dsl_dir_t *dd, dsl_dataset_t *origin,
     uint64_t flags, dmu_tx_t *tx);
 int dsl_dataset_snapshot(nvlist_t *snaps, nvlist_t *props, nvlist_t *errors);
 int dsl_dataset_promote(const char *name, char *conflsnap);
-int dsl_dataset_clone_swap(dsl_dataset_t *clone, dsl_dataset_t *origin_head,
-    boolean_t force);
 int dsl_dataset_rename_snapshot(const char *fsname,
     const char *oldsnapname, const char *newsnapname, boolean_t recursive);
 int dsl_dataset_snapshot_tmp(const char *fsname, const char *snapname,

@@ -3359,15 +3359,14 @@ zfs_unmount_snap(const char *snapname)
 {
 	zfs_sb_t *zsb = NULL;
 	char *dsname;
-	char *snapname;
 	char *fullname;
 	char *ptr;
 
-	if ((ptr = strchr(name, '@')) == NULL)
+	if ((ptr = strchr(snapname, '@')) == NULL)
 		return;
 
-	dsname = strdup(name);
-	dsname[ptr - name] = '\0';
+	dsname = strdup(snapname);
+	dsname[ptr - snapname] = '\0';
 	snapname = strdup(ptr + 1);
 	fullname = kmem_asprintf("%s@%s", dsname, snapname);
 	if (zfs_sb_hold(dsname, FTAG, &zsb, B_FALSE) == 0) {
@@ -3377,7 +3376,6 @@ zfs_unmount_snap(const char *snapname)
 	}
 
 	strfree(dsname);
-	strfree(snapname);
 	strfree(fullname);
 
 	return;
@@ -3514,7 +3512,7 @@ recursive_unmount(const char *fsname, void *arg)
 	const char *snapname = arg;
 	char *fullname;
 
-	(void) kmem_asprintf("%s@%s", fsname, snapname);
+	fullname = kmem_asprintf("%s@%s", fsname, snapname);
 	zfs_unmount_snap(fullname);
 	strfree(fullname);
 	return (0);
@@ -3533,7 +3531,6 @@ zfs_ioc_rename(zfs_cmd_t *zc)
 {
 	boolean_t recursive = zc->zc_cookie & 1;
 	char *at;
-	int err;
 
 	zc->zc_value[sizeof (zc->zc_value) - 1] = '\0';
 	if (dataset_namecheck(zc->zc_value, NULL, NULL) != 0 ||
@@ -5040,6 +5037,7 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 	offset_t off;
 	char *fromname = NULL;
 	int fd;
+	file_t *fp;
 
 	error = nvlist_lookup_int32(innvl, "fd", &fd);
 	if (error != 0)
@@ -5047,19 +5045,15 @@ zfs_ioc_send_new(const char *snapname, nvlist_t *innvl, nvlist_t *outnvl)
 
 	(void) nvlist_lookup_string(innvl, "fromsnap", &fromname);
 
-	{
-	file_t *fp = getf(fd);
-
-	if (fp == NULL)
+	if ((fp = getf(fd)) == NULL)
 		return (EBADF);
-	}
 
 	off = fp->f_offset;
 	error = dmu_send(snapname, fromname, fd, fp->f_vnode, &off);
 
 	if (VOP_SEEK(fp->f_vnode, fp->f_offset, &off, NULL) == 0)
 		fp->f_offset = off;
-	}
+
 	releasef(fd);
 	return (error);
 }

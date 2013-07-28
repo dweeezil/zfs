@@ -2924,10 +2924,8 @@ EXPORT_SYMBOL(dsl_dataset_create_sync_dd);
 EXPORT_SYMBOL(dsl_dataset_snapshot_check);
 EXPORT_SYMBOL(dsl_dataset_snapshot_sync);
 EXPORT_SYMBOL(dsl_dataset_promote);
-EXPORT_SYMBOL(dsl_dataset_clone_swap);
 EXPORT_SYMBOL(dsl_dataset_user_hold);
 EXPORT_SYMBOL(dsl_dataset_user_release);
-EXPORT_SYMBOL(dsl_dataset_user_release_tmp);
 EXPORT_SYMBOL(dsl_dataset_get_holds);
 EXPORT_SYMBOL(dsl_dataset_get_blkptr);
 EXPORT_SYMBOL(dsl_dataset_set_blkptr);
@@ -2947,5 +2945,6 @@ EXPORT_SYMBOL(dsl_dataset_space);
 EXPORT_SYMBOL(dsl_dataset_fsid_guid);
 EXPORT_SYMBOL(dsl_dsobj_to_dsname);
 EXPORT_SYMBOL(dsl_dataset_check_quota);
-EXPORT_SYMBOL(dsl_destroy_inconsistent);
+EXPORT_SYMBOL(dsl_dataset_clone_swap_check_impl);
+EXPORT_SYMBOL(dsl_dataset_clone_swap_sync_impl);
 #endif

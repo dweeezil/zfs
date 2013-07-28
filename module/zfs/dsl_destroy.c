@@ -237,7 +237,9 @@ dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 	dsl_pool_t *dp = ds->ds_dir->dd_pool;
 	objset_t *mos = dp->dp_meta_objset;
 	dsl_dataset_t *ds_prev = NULL;
-	uint64_t obj;
+	uint64_t obj, old_unique, used = 0, comp = 0, uncomp = 0;
+	dsl_dataset_t *ds_next, *ds_head, *hds;
+
 
 	ASSERT(RRW_WRITE_HELD(&dp->dp_config_rwlock));
 	ASSERT3U(ds->ds_phys->ds_bp.blk_birth, <=, tx->tx_txg);
@@ -283,10 +285,6 @@ dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 			    ds->ds_phys->ds_next_snap_obj;
 		}
 	}
-
-	dsl_dataset_t *ds_next;
-	uint64_t old_unique;
-	uint64_t used = 0, comp = 0, uncomp = 0;
 
 	VERIFY0(dsl_dataset_hold_obj(dp,
 	    ds->ds_phys->ds_next_snap_obj, FTAG, &ds_next));
@@ -365,7 +363,6 @@ dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 		ASSERT3P(ds_next->ds_prev, ==, NULL);
 
 		/* Collapse range in this head. */
-		dsl_dataset_t *hds;
 		VERIFY0(dsl_dataset_hold_obj(dp,
 		    ds->ds_dir->dd_phys->dd_head_dataset_obj, FTAG, &hds));
 		dsl_deadlist_remove_key(&hds->ds_deadlist,
@@ -413,7 +410,6 @@ dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 	}
 
 	/* remove from snapshot namespace */
-	dsl_dataset_t *ds_head;
 	ASSERT(ds->ds_phys->ds_snapnames_zapobj == 0);
 	VERIFY0(dsl_dataset_hold_obj(dp,
 	    ds->ds_dir->dd_phys->dd_head_dataset_obj, FTAG, &ds_head));
@@ -682,6 +678,8 @@ dsl_destroy_head_sync_impl(dsl_dataset_t *ds, dmu_tx_t *tx)
 	objset_t *mos = dp->dp_meta_objset;
 	uint64_t obj, ddobj, prevobj = 0;
 	boolean_t rmorigin;
+	zfeature_info_t *async_destroy;
+	objset_t *os;
 
 	ASSERT3U(ds->ds_phys->ds_num_children, <=, 1);
 	ASSERT(ds->ds_prev == NULL ||
@@ -725,9 +723,8 @@ dsl_destroy_head_sync_impl(dsl_dataset_t *ds, dmu_tx_t *tx)
 		ds->ds_prev->ds_phys->ds_num_children--;
 	}
 
-	zfeature_info_t *async_destroy =
+	async_destroy =
 	    &spa_feature_table[SPA_FEATURE_ASYNC_DESTROY];
-	objset_t *os;
 
 	/*
 	 * Destroy the deadlist.  Unless it's a clone, the

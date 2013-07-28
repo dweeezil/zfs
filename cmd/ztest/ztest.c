@@ -2506,7 +2506,7 @@ ztest_vdev_add_remove(ztest_ds_t *zd, uint64_t id)
 		 * prevent a race between removing a slog (dmu_objset_find)
 		 * and destroying a dataset. Removing the slog will
 		 * grab a reference on the dataset which may cause
-		 * dmu_objset_destroy() to fail with EBUSY thus
+		 * dsl_destroy_head() to fail with EBUSY thus
 		 * leaving the dataset in an inconsistent state.
 		 */
 		rw_enter(&ztest_name_lock, RW_WRITER);
@@ -3273,7 +3273,7 @@ ztest_dmu_objset_create_destroy(ztest_ds_t *zd, uint64_t id)
 
 	/*
 	 * If this dataset exists from a previous run, process its replay log
-	 * half of the time.  If we don't replay it, then dmu_objset_destroy()
+	 * half of the time.  If we don't replay it, then dsl_destroy_head()
 	 * (invoked from ztest_objset_destroy_cb()) should just throw it away.
 	 */
 	if (ztest_random(2) == 0 &&
@@ -4962,7 +4962,7 @@ ztest_fault_inject(ztest_ds_t *zd, uint64_t id)
 			 * prevent a race between offlining a slog and
 			 * destroying a dataset. Offlining the slog will
 			 * grab a reference on the dataset which may cause
-			 * dmu_objset_destroy() to fail with EBUSY thus
+			 * dsl_destroy_head() to fail with EBUSY thus
 			 * leaving the dataset in an inconsistent state.
 			 */
 			if (islog)

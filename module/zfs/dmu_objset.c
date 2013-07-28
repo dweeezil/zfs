@@ -1768,7 +1768,6 @@ EXPORT_SYMBOL(dmu_objset_spa);
 EXPORT_SYMBOL(dmu_objset_space);
 EXPORT_SYMBOL(dmu_objset_fsid_guid);
 EXPORT_SYMBOL(dmu_objset_find);
-EXPORT_SYMBOL(dmu_objset_prefetch);
 EXPORT_SYMBOL(dmu_objset_byteswap);
 EXPORT_SYMBOL(dmu_objset_evict_dbufs);
 EXPORT_SYMBOL(dmu_objset_snap_cmtime);
