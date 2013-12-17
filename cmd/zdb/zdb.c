@@ -1899,10 +1899,17 @@ dump_uidgid(objset_t *os, uint64_t uid, uint64_t gid)
 	print_idstr(gid, "gid");
 }
 
+void
+octdump(void *ptr, int cnt) {
+	unsigned char *s = ptr;
+	while (cnt-- > 0)
+		printf("\\%3.3o", *s++);
+}
+
 static void
 dump_znode_sa_xattr(sa_handle_t *hdl)
 {
-	nvlist_t *sa_xattr;
+	nvlist_t *sa_xattr = NULL;
 	nvpair_t *elem = NULL;
 	int sa_xattr_size = 0;
 	int sa_xattr_entries = 0;
@@ -1910,6 +1917,8 @@ dump_znode_sa_xattr(sa_handle_t *hdl)
 	char *sa_xattr_packed;
 
 	error = sa_size(hdl, sa_attr_table[ZPL_DXATTR], &sa_xattr_size);
+	if (dump_opt['d'] > 4)
+		printf("\t%s: sa_xattr_size=%d sa_size error=%d\n", __FUNCTION__, sa_xattr_size, error);
 	if (error || sa_xattr_size == 0)
 		return;
 
@@ -1924,8 +1933,20 @@ dump_znode_sa_xattr(sa_handle_t *hdl)
 		return;
 	}
 
+	if (dump_opt['d'] > 5) {
+		printf("\tSA packed dump sa_xattr_size=%d: ", sa_xattr_size);
+		octdump(sa_xattr_packed, sa_xattr_size);
+		printf("\n");
+	}
+
 	error = nvlist_unpack(sa_xattr_packed, sa_xattr_size, &sa_xattr, 0);
+	if (dump_opt['d'] > 4) {
+		printf("\tSA xattr dump:\n");
+		dump_nvlist(sa_xattr, 16);
+	}
+
 	if (error) {
+		printf("\t%s: nvlist_unpack error=%d\n", __FUNCTION__, error);
 		free(sa_xattr_packed);
 		return;
 	}
