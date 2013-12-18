@@ -1975,6 +1975,30 @@ dump_znode_sa_xattr(sa_handle_t *hdl)
 	free(sa_xattr_packed);
 }
 
+static void
+dump_znode_sa_misc(sa_handle_t *hdl)
+{
+	int size, error, i;
+	static struct zpl_attr_info {
+		zpl_attr_t zai_attr;
+		char *zai_descr;
+	} zai_data[] = {
+		{ ZPL_DACL_ACES, "DACL_ACES"},
+		{ ZPL_ZNODE_ACL, "ZNODE_ACL"}
+	};
+	printf("\tMisc SA sizes:\n");
+	for (i = 0 ; i < sizeof(zai_data) / sizeof(zai_data[0]) ; ++i) {
+		error = sa_size(hdl, zai_data[i].zai_attr, &size);
+		printf("\t\t%s = ", zai_data[i].zai_descr);
+		if (error == 0)
+			printf("%d\n", size);
+		else if (error == ENOENT)
+			printf("N/A\n");
+		else
+			printf("(%s)\n", strerror(error));
+	}
+}
+
 /*ARGSUSED*/
 static void
 dump_znode(objset_t *os, uint64_t object, void *data, size_t size)
@@ -2069,6 +2093,7 @@ dump_znode(objset_t *os, uint64_t object, void *data, size_t size)
 	if (sa_lookup(hdl, sa_attr_table[ZPL_RDEV], &rdev,
 	    sizeof (uint64_t)) == 0)
 		(void) printf("\trdev	0x%016llx\n", (u_longlong_t)rdev);
+	dump_znode_sa_misc(hdl);
 	dump_znode_sa_xattr(hdl);
 	sa_handle_destroy(hdl);
 }
