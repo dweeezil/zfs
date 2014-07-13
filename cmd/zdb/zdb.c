@@ -1360,7 +1360,12 @@ snprintf_blkptr_compact(char *blkbuf, size_t buflen, const blkptr_t *bp)
 	int i;
 
 	if (dump_opt['b'] >= 6) {
-		snprintf_blkptr(blkbuf, buflen, bp);
+		if (dump_opt['d'] > 6) {
+			blkbuf[0] = '\0';
+			for (i = 0 ; i < 16 ; ++i)
+				sprintf(blkbuf + strlen(blkbuf), " [%d]%llx", i, ((unsigned long long *)bp)[i]);
+		} else
+			snprintf_blkptr(blkbuf, buflen, bp);
 		return;
 	}
 
