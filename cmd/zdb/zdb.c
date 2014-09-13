@@ -1989,6 +1989,7 @@ dump_znode(objset_t *os, uint64_t object, void *data, size_t size)
 	sa_bulk_attr_t bulk[13];
 	int idx = 0;
 	int error;
+	sa_hdr_phys_t *sahdr = data;
 
 	VERIFY3P(os, ==, sa_os);
 	if (sa_handle_get(os, object, NULL, SA_HDL_PRIVATE, &hdl)) {
@@ -2041,6 +2042,8 @@ dump_znode(objset_t *os, uint64_t object, void *data, size_t size)
 		}
 		(void) printf("\tpath	%s\n", path);
 	}
+	(void) printf("\tSA hdrsize %d\n", SA_HDR_SIZE(sahdr));
+	(void) printf("\tSA layout %d\n", SA_HDR_LAYOUT_NUM(sahdr));
 	dump_uidgid(os, uid, gid);
 	(void) printf("\tatime	%s", ctime(&z_atime));
 	(void) printf("\tmtime	%s", ctime(&z_mtime));
