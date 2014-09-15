@@ -2267,6 +2267,12 @@ dump_object(objset_t *os, uint64_t object, int verbosity, int *print_header,
 		*print_header = 1;
 	}
 
+	if (verbosity >= 6 && (dn->dn_phys->dn_flags & DNODE_FLAG_SPILL_BLKPTR)) {
+		char blkbuf[BP_SPRINTF_LEN];
+		snprintf_blkptr_compact(blkbuf, sizeof (blkbuf), &dn->dn_phys->dn_spill);
+		(void) printf("\n\tSpill blkptr:\n\t\t%s\n", blkbuf);
+	}
+
 	if (verbosity >= 5)
 		dump_indirect(dn);
 
