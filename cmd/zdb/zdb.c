@@ -2250,6 +2250,12 @@ dump_object(objset_t *os, uint64_t object, int verbosity, int *print_header,
 		(void) printf("\tdnode maxblkid: %llu\n",
 		    (longlong_t)dn->dn_phys->dn_maxblkid);
 
+		if (verbosity >= 6 && (dn->dn_phys->dn_flags & DNODE_FLAG_SPILL_BLKPTR)) {
+			char blkbuf[BP_SPRINTF_LEN];
+			snprintf_blkptr_compact(blkbuf, sizeof (blkbuf), &dn->dn_phys->dn_spill);
+			(void) printf("\n\tSpill blkptr:\n\t\t%s\n", blkbuf);
+		}
+
 		if (!dnode_held) {
 			object_viewer[ZDB_OT_TYPE(doi.doi_bonus_type)](os,
 			    object, bonus, bsize);
@@ -2263,14 +2269,7 @@ dump_object(objset_t *os, uint64_t object, int verbosity, int *print_header,
 		} else {
 			(void) printf("\t\t(object encrypted)\n");
 		}
-
 		*print_header = 1;
-	}
-
-	if (verbosity >= 6 && (dn->dn_phys->dn_flags & DNODE_FLAG_SPILL_BLKPTR)) {
-		char blkbuf[BP_SPRINTF_LEN];
-		snprintf_blkptr_compact(blkbuf, sizeof (blkbuf), &dn->dn_phys->dn_spill);
-		(void) printf("\n\tSpill blkptr:\n\t\t%s\n", blkbuf);
 	}
 
 	if (verbosity >= 5)
