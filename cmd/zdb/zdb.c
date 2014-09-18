@@ -2254,6 +2254,11 @@ dump_object(objset_t *os, uint64_t object, int verbosity, int *print_header,
 			char blkbuf[BP_SPRINTF_LEN];
 			snprintf_blkptr_compact(blkbuf, sizeof (blkbuf), &dn->dn_phys->dn_spill);
 			(void) printf("\n\tSpill blkptr:\n\t\t%s\n", blkbuf);
+			if (verbosity >= 7) {
+				(void) printf("\tSpill blkptr dump: ");
+				octdump(&dn->dn_phys->dn_spill, sizeof (dn->dn_phys->dn_spill));
+				(void) printf("\n");
+			}
 		}
 
 		if (!dnode_held) {
