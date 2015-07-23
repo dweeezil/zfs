@@ -39,6 +39,7 @@
 #include <sys/zil.h>
 #include <sys/vdev_impl.h>
 #include <sys/vdev_initialize.h>
+#include <sys/vdev_trim.h>
 #include <sys/vdev_file.h>
 #include <sys/vdev_raidz.h>
 #include <sys/metaslab.h>
@@ -1200,6 +1201,15 @@ spa_vdev_config_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error, char *tag)
 			vdev_initialize_stop(vd, VDEV_INITIALIZE_CANCELED,
 			    NULL);
 			mutex_exit(&vd->vdev_initialize_lock);
+
+			mutex_enter(&vd->vdev_trim_lock);
+			vdev_trim_stop(vd, VDEV_TRIM_CANCELED, NULL);
+			mutex_exit(&vd->vdev_trim_lock);
+
+			/*
+			 * The vdev may be both a leaf and top-level device.
+			 */
+			vdev_autotrim_stop_wait(vd);
 		}
 
 		spa_config_enter(spa, SCL_ALL, spa, RW_WRITER);
@@ -1917,6 +1927,12 @@ uint64_t
 spa_deadman_synctime(spa_t *spa)
 {
 	return (spa->spa_deadman_synctime);
+}
+
+spa_autotrim_t
+spa_get_autotrim(spa_t *spa)
+{
+	return (spa->spa_autotrim);
 }
 
 uint64_t

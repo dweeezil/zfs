@@ -30,6 +30,7 @@
 #include <sys/spa_impl.h>
 #include <sys/vdev_disk.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/abd.h>
 #include <sys/fs/zfs.h>
 #include <sys/zio.h>
@@ -216,7 +217,7 @@ vdev_elevator_switch(vdev_t *v, char *elevator)
 	strfree(argv[2]);
 #endif /* HAVE_ELEVATOR_CHANGE */
 	if (error) {
-		zfs_dbgmsg("Unable to set \"%s\" scheduler for %s (%s): %d\n",
+		zfs_dbgmsg("Unable to set \"%s\" scheduler for %s (%s): %d",
 		    elevator, v->vdev_path, device, error);
 	}
 }
@@ -315,7 +316,7 @@ vdev_disk_open(vdev_t *v, uint64_t *psize, uint64_t *max_psize,
 
 	if (IS_ERR(bdev)) {
 		int error = -PTR_ERR(bdev);
-		vdev_dbgmsg(v, "open error=%d count=%d\n", error, count);
+		vdev_dbgmsg(v, "open error=%d count=%d", error, count);
 		vd->vd_bdev = NULL;
 		v->vdev_tsd = vd;
 		rw_exit(&vd->vd_lock);
@@ -331,6 +332,9 @@ vdev_disk_open(vdev_t *v, uint64_t *psize, uint64_t *max_psize,
 
 	/* Clear the nowritecache bit, causes vdev_reopen() to try again. */
 	v->vdev_nowritecache = B_FALSE;
+
+	/* Set TRIM flag based on support reported by the underlying device. */
+	v->vdev_notrim = !blk_queue_discard(bdev_get_queue(vd->vd_bdev));
 
 	/* Inform the ZIO pipeline that we are non-rotational */
 	v->vdev_nonrot = blk_queue_nonrot(bdev_get_queue(vd->vd_bdev));
@@ -805,6 +809,13 @@ vdev_disk_io_start(zio_t *zio)
 		flags = 0;
 #endif
 		break;
+
+	case ZIO_TYPE_TRIM:
+		zio->io_error = -blkdev_issue_discard(vd->vd_bdev,
+		    zio->io_offset >> 9, zio->io_size >> 9, GFP_NOFS, 0);
+		rw_exit(&vd->vd_lock);
+		zio_interrupt(zio);
+		return;
 
 	default:
 		rw_exit(&vd->vd_lock);
