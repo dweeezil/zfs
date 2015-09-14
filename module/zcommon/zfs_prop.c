@@ -295,6 +295,14 @@ zfs_prop_init(void)
 		{ "geom",	ZFS_VOLMODE_GEOM },
 		{ "dev",	ZFS_VOLMODE_DEV },
 		{ "none",	ZFS_VOLMODE_NONE },
+	};
+
+	static zprop_index_t inheritid_table[] = {
+		{ "off",	ZFS_INHERITID_OFF },
+		{ "uid",	ZFS_INHERITID_UID },
+		{ "gid",	ZFS_INHERITID_GID },
+		{ "all",	ZFS_INHERITID_ALL },
+
 		{ NULL }
 	};
 
@@ -375,6 +383,9 @@ zfs_prop_init(void)
 	    ZFS_VOLMODE_DEFAULT, PROP_INHERIT,
 	    ZFS_TYPE_FILESYSTEM | ZFS_TYPE_VOLUME,
 	    "default | full | geom | dev | none", "VOLMODE", volmode_table);
+	zprop_register_index(ZFS_PROP_INHERITID, "inheritid", ZFS_INHERITID_OFF,
+	    PROP_INHERIT, ZFS_TYPE_FILESYSTEM,
+	    "none | uid | gid | all", "INHERITID", inheritid_table);
 
 	/* inherit index (boolean) properties */
 	zprop_register_index(ZFS_PROP_ATIME, "atime", 1, PROP_INHERIT,
