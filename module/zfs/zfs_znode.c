@@ -600,8 +600,16 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 	    &zp->z_pflags, 8);
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_PARENT(zfsvfs), NULL,
 	    &parent, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL, &z_uid, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL, &z_gid, 8);
+	if (zfsvfs->z_vfs->vfs_do_fs_uid)
+		z_uid = zfsvfs->z_vfs->vfs_fs_uid;
+	else
+		SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL,
+		    &z_uid, 8);
+	if (zfsvfs->z_vfs->vfs_do_fs_gid)
+		z_gid = zfsvfs->z_vfs->vfs_fs_gid;
+	else
+		SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL,
+		    &z_gid, 8);
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_ATIME(zfsvfs), NULL, &atime, 16);
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MTIME(zfsvfs), NULL, &mtime, 16);
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_CTIME(zfsvfs), NULL, &ctime, 16);
@@ -1254,10 +1262,16 @@ zfs_rezget(znode_t *zp)
 	    &links, sizeof (links));
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_FLAGS(zfsvfs), NULL,
 	    &zp->z_pflags, sizeof (zp->z_pflags));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL,
-	    &z_uid, sizeof (z_uid));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL,
-	    &z_gid, sizeof (z_gid));
+	if (zfsvfs->z_vfs->vfs_do_fs_uid)
+		z_uid = zfsvfs->z_vfs->vfs_fs_uid;
+	else
+		SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL,
+		    &z_uid, sizeof (z_uid));
+	if (zfsvfs->z_vfs->vfs_do_fs_gid)
+		z_gid = zfsvfs->z_vfs->vfs_fs_gid;
+	else
+		SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL,
+		    &z_gid, sizeof (z_gid));
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MODE(zfsvfs), NULL,
 	    &mode, sizeof (mode));
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_ATIME(zfsvfs), NULL,

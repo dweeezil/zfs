@@ -34,11 +34,17 @@
 #include <locale.h>
 #include <getopt.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 #define	ZS_COMMENT	0x00000000	/* comment */
 #define	ZS_ZFSUTIL	0x00000001	/* caller is zfs(8) */
+#define	ZS_UID		0x00000002	/* uid override */
+#define	ZS_GID		0x00000004	/* gid override */
 
 libzfs_handle_t *g_zfs;
+
+static uid_t mount_uid;			/* value for uid override */
+static gid_t mount_gid;			/* value for gid override */
 
 typedef struct option_map {
 	const char *name;
@@ -109,6 +115,8 @@ static const option_map_t option_map[] = {
 	{ MNTOPT_XATTR,		MS_COMMENT,	ZS_COMMENT	},
 	{ MNTOPT_NOXATTR,	MS_COMMENT,	ZS_COMMENT	},
 	{ MNTOPT_ZFSUTIL,	MS_COMMENT,	ZS_ZFSUTIL	},
+	{ MNTOPT_UID,		MS_COMMENT,	ZS_UID		},
+	{ MNTOPT_GID,		MS_COMMENT,	ZS_GID		},
 	{ NULL,			0,		0		} };
 
 /*
@@ -120,8 +128,9 @@ parse_option(char *mntopt, unsigned long *mntflags,
     unsigned long *zfsflags, int sloppy)
 {
 	const option_map_t *opt;
-	char *ptr, *name, *value = NULL;
+	char *ptr, *name, *value = NULL, *endvalue;
 	int error = 0;
+	unsigned long val;
 
 	name = strdup(mntopt);
 	if (name == NULL)
@@ -149,6 +158,21 @@ parse_option(char *mntopt, unsigned long *mntflags,
 		error = ENOENT;
 out:
 	/* If required further process on the value may be done here */
+
+	/* set mount_uid if uid=<id> has been specified */
+	if (*zfsflags & ZS_UID && isdigit(value[0])) {
+		val = strtoul(value, &endvalue, 10);
+		if (endvalue && endvalue[0] == '\0')
+			mount_uid = val;
+	}
+
+	/* set mount_gid if gid=<id> has been specified */
+	if (*zfsflags & ZS_GID && isdigit(value[0])) {
+		val = strtoul(value, &endvalue, 10);
+		if (endvalue && endvalue[0] == '\0')
+			mount_gid = val;
+	}
+
 	free(name);
 	return (error);
 }
@@ -359,6 +383,24 @@ append_mntopt(const char *name, const char *val, char *mntopts,
 }
 
 static void
+append_mntopt_val(unsigned long zfsmask, unsigned long val, char *mntopts)
+{
+	char tmp[MNT_LINE_MAX];
+	char *name;
+
+	if (zfsmask & ZS_UID)
+		name = "uid";
+	else if (zfsmask & ZS_GID)
+		name = "gid";
+	else
+		return;
+
+	snprintf(tmp, MNT_LINE_MAX, "%s%s=%lu",
+	    mntopts[0] ? "," : "", name, val);
+	strlcat(mntopts, tmp, MNT_LINE_MAX);
+}
+
+static void
 zfs_selinux_setcontext(zfs_handle_t *zhp, zfs_prop_t zpt, const char *name,
     char *mntopts, char *mtabopt)
 {
@@ -376,7 +418,7 @@ main(int argc, char **argv)
 {
 	zfs_handle_t *zhp;
 	char prop[ZFS_MAXPROPLEN];
-	uint64_t zfs_version = 0;
+	uint64_t zfs_version = 0, inheritid = 0;
 	char mntopts[MNT_LINE_MAX] = { '\0' };
 	char badopt[MNT_LINE_MAX] = { '\0' };
 	char mtabopt[MNT_LINE_MAX] = { '\0' };
@@ -544,6 +586,51 @@ main(int argc, char **argv)
 		fprintf(stderr, gettext("unable to fetch "
 		    "ZFS version for filesystem '%s'\n"), dataset);
 		return (MOUNT_SYSERR);
+	}
+
+	/*
+	 * If ZFS_PROP_INHERITID is set, pass the uid and/or gid of the
+	 * mount point to the kernel if they've not been set with the
+	 * uid= or gid= mount options.
+	 */
+	inheritid = zfs_prop_get_int(zhp, ZFS_PROP_INHERITID);
+	if (inheritid > 0) {
+		struct stat mntpointstat;
+
+		error = lstat(mntpoint, &mntpointstat);
+		if (!error) {
+			switch (inheritid) {
+			case ZFS_INHERITID_OFF:
+			default:
+				break;
+			case ZFS_INHERITID_UID:
+				if (!mount_uid) {
+					mount_uid = mntpointstat.st_uid;
+					append_mntopt_val(ZS_UID, mount_uid,
+					    mntopts);
+				}
+				break;
+			case ZFS_INHERITID_GID:
+				if (!mount_gid) {
+					mount_gid = mntpointstat.st_gid;
+					append_mntopt_val(ZS_GID, mount_gid,
+					    mntopts);
+				}
+				break;
+			case ZFS_INHERITID_ALL:
+				if (!mount_uid) {
+					mount_uid = mntpointstat.st_uid;
+					append_mntopt_val(ZS_UID, mount_uid,
+					    mntopts);
+				}
+				if (!mount_gid) {
+					mount_gid = mntpointstat.st_gid;
+					append_mntopt_val(ZS_GID, mount_gid,
+					    mntopts);
+				}
+				break;
+			}
+		}
 	}
 
 	zfs_close(zhp);

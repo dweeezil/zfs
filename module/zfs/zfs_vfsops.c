@@ -88,6 +88,8 @@ enum {
 	TOKEN_NBMAND,
 	TOKEN_NONBMAND,
 	TOKEN_MNTPOINT,
+	TOKEN_UID,
+	TOKEN_GID,
 	TOKEN_LAST,
 };
 
@@ -111,6 +113,8 @@ static const match_table_t zpl_tokens = {
 	{ TOKEN_NBMAND,		MNTOPT_NBMAND },
 	{ TOKEN_NONBMAND,	MNTOPT_NONBMAND },
 	{ TOKEN_MNTPOINT,	MNTOPT_MNTPOINT "=%s" },
+	{ TOKEN_UID,		MNTOPT_UID "=%u" },
+	{ TOKEN_GID,		MNTOPT_GID "=%u" },
 	{ TOKEN_LAST,		NULL },
 };
 
@@ -128,6 +132,8 @@ zfsvfs_vfs_free(vfs_t *vfsp)
 static int
 zfsvfs_parse_option(char *option, int token, substring_t *args, vfs_t *vfsp)
 {
+	int intresult;
+
 	switch (token) {
 	case TOKEN_RO:
 		vfsp->vfs_readonly = B_TRUE;
@@ -206,6 +212,18 @@ zfsvfs_parse_option(char *option, int token, substring_t *args, vfs_t *vfsp)
 		if (vfsp->vfs_mntpoint == NULL)
 			return (SET_ERROR(ENOMEM));
 
+		break;
+	case TOKEN_UID:
+		if (match_int(&args[0], &intresult) == 0) {
+			vfsp->vfs_do_fs_uid = B_TRUE;
+			vfsp->vfs_fs_uid = intresult;
+		}
+		break;
+	case TOKEN_GID:
+		if (match_int(&args[0], &intresult) == 0) {
+			vfsp->vfs_do_fs_gid = B_TRUE;
+			vfsp->vfs_fs_gid = intresult;
+		}
 		break;
 	default:
 		break;
@@ -349,6 +367,9 @@ static void
 acltype_changed_cb(void *arg, uint64_t newval)
 {
 	zfsvfs_t *zfsvfs = arg;
+
+	if (zfsvfs->z_vfs->vfs_do_fs_uid || zfsvfs->z_vfs->vfs_do_fs_gid)
+		newval = ZFS_ACLTYPE_OFF;
 
 	switch (newval) {
 	case ZFS_ACLTYPE_OFF:

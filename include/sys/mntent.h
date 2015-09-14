@@ -99,5 +99,7 @@
 #define	MNTOPT_NOACL	"noacl"		/* likewise */
 #define	MNTOPT_POSIXACL	"posixacl"	/* likewise */
 #define	MNTOPT_MNTPOINT	"mntpoint"	/* mount point hint */
+#define	MNTOPT_UID	"uid"		/* set uid for all files */
+#define	MNTOPT_GID	"gid"		/* set gid for all files */
 
 #endif	/* _SYS_MNTENT_H */

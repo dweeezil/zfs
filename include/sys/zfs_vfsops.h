@@ -65,6 +65,10 @@ typedef struct vfs {
 	boolean_t	vfs_do_relatime;
 	boolean_t	vfs_nbmand;
 	boolean_t	vfs_do_nbmand;
+	boolean_t	vfs_do_fs_uid;
+	uid_t		vfs_fs_uid;
+	boolean_t	vfs_do_fs_gid;
+	gid_t		vfs_fs_gid;
 } vfs_t;
 
 typedef struct zfs_mnt {
