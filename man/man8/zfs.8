@@ -1446,6 +1446,20 @@ dataset creation time and it cannot be changed afterwards.
 For more details and caveats about encryption see the
 .Sy Encryption
 section.
+.It Sy inheritid Ns = Ns Sy none Ns | Ns Sy uid Ns | Ns Sy gid Ns | Ns Sy all
+Causes all files' uid, gid or both to be inherited from the filesystem's
+mount point and also causes newly-created files, directories and symlinks
+to inherit the original uid and/or gid of the directory in which they
+are created.
+.Pp
+The inherited ids may also be specified with the
+.Ar uid=
+and
+.Ar gid=
+mount options. See mount.zfs(8).
+.Pp
+This facility is designed to facilitate the sharing of media between
+systems on which the users don't have the same uid or gid.
 .It Sy keyformat Ns = Ns Sy raw Ns | Ns Sy hex Ns | Ns Sy passphrase
 Controls what format the user's encryption key will be provided as. This
 property is only set when the dataset is encrypted.

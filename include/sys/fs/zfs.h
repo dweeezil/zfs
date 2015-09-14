@@ -184,6 +184,7 @@ typedef enum {
 	ZFS_PROP_REMAPTXG,		/* not exposed to the user */
 	ZFS_PROP_SPECIAL_SMALL_BLOCKS,
 	ZFS_PROP_IVSET_GUID,		/* not exposed to the user */
+	ZFS_PROP_INHERITID,
 	ZFS_NUM_PROPS
 } zfs_prop_t;
 
@@ -454,6 +455,13 @@ typedef enum zfs_key_location {
 
 #define	DEFAULT_PBKDF2_ITERATIONS 350000
 #define	MIN_PBKDF2_ITERATIONS 100000
+
+typedef enum {
+	ZFS_INHERITID_OFF,
+	ZFS_INHERITID_UID,
+	ZFS_INHERITID_GID,
+	ZFS_INHERITID_ALL
+} zfs_inheritid_type_t;
 
 /*
  * On-disk version number.
