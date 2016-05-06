@@ -514,6 +514,21 @@ dump_bpobj(objset_t *os, uint64_t object, void *data, size_t size)
 	}
 }
 
+static void
+dump_raw(objset_t *os, uint64_t object, void *data, size_t size)
+{
+	char bytes[512];
+	uint64_t off = 0;
+	int i = 0;
+
+	for (i = 0; i < 2048; i++) {
+		if (dmu_read(os, object, off, sizeof (bytes), bytes, 0) != 0)
+			return;
+		(void) fwrite(bytes, sizeof (bytes), 1, stdout);
+		off += sizeof (bytes);
+	}
+}
+
 /* ARGSUSED */
 static void
 dump_bpobj_subobjs(objset_t *os, uint64_t object, void *data, size_t size)
@@ -2195,6 +2210,10 @@ dump_object(objset_t *os, uint64_t object, int verbosity, int *print_header,
 	CTASSERT(sizeof (lsize) >= NN_NUMBUF_SZ);
 	CTASSERT(sizeof (asize) >= NN_NUMBUF_SZ);
 	CTASSERT(sizeof (bonus_size) >= NN_NUMBUF_SZ);
+	if (dump_opt['a']) {
+		dump_raw(os, object, NULL, 0);
+		return;
+	}
 
 	if (*print_header) {
 		(void) printf("\n%10s  %3s  %5s  %5s  %5s  %6s  %5s  %6s  %s\n",
@@ -2406,17 +2425,19 @@ dump_dir(objset_t *os)
 
 	dmu_objset_name(os, osname);
 
-	(void) printf("Dataset %s [%s], ID %llu, cr_txg %llu, "
-	    "%s, %llu objects%s\n",
-	    osname, type, (u_longlong_t)dmu_objset_id(os),
-	    (u_longlong_t)dds.dds_creation_txg,
-	    numbuf, (u_longlong_t)usedobjs, blkbuf);
+	if (!dump_opt['a'])
+		(void) printf("Dataset %s [%s], ID %llu, cr_txg %llu, "
+		    "%s, %llu objects%s\n",
+		    osname, type, (u_longlong_t)dmu_objset_id(os),
+		    (u_longlong_t)dds.dds_creation_txg,
+		    numbuf, (u_longlong_t)usedobjs, blkbuf);
 
 	if (zopt_objects != 0) {
 		for (i = 0; i < zopt_objects; i++)
 			dump_object(os, zopt_object[i], verbosity,
 			    &print_header, NULL);
-		(void) printf("\n");
+		if (!dump_opt['a'])
+			(void) printf("\n");
 		return;
 	}
 
@@ -5552,8 +5573,9 @@ main(int argc, char **argv)
 		spa_config_path = spa_config_path_env;
 
 	while ((c = getopt(argc, argv,
-	    "AbcCdDeEFGhiI:klLmMo:Op:PqRsSt:uU:vVx:Xz")) != -1) {
+	    "AAbcCdDeEFGhiI:klLmMo:Op:PqRsSt:uU:vVx:Xz")) != -1) {
 		switch (c) {
+		case 'a':
 		case 'b':
 		case 'c':
 		case 'C':
