@@ -3464,8 +3464,9 @@ zdb_blkptr_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 
 		zfs_nicebytes(bytes, buf, sizeof (buf));
 		(void) fprintf(stderr,
-		    "\r%5s completed (%4dMB/s) "
+		    "\rganged=%llu %5s completed (%4dMB/s) "
 		    "estimated time remaining: %uhr %02umin %02usec        ",
+		    (unsigned long long)zcb->zcb_type[ZB_TOTAL][ZDB_OT_TOTAL].zb_gangs,
 		    buf, kb_per_sec / 1024,
 		    sec_remaining / 60 / 60,
 		    sec_remaining / 60 % 60,
