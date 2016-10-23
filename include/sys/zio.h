@@ -392,6 +392,9 @@ typedef struct zio_vsd_ops {
 
 typedef struct zio_gang_node {
 	zio_gbh_phys_t		*gn_gbh;
+#ifndef _KERNEL
+	int			gn_depth;
+#endif
 	struct zio_gang_node	*gn_child[SPA_GBH_NBLKPTRS];
 } zio_gang_node_t;
 

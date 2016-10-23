@@ -62,6 +62,8 @@ unsigned long metaslab_force_ganging = SPA_MAXBLOCKSIZE + 1;
  */
 int zfs_metaslab_sm_blksz = (1 << 12);
 
+uint64_t metaslab_gang_bang = 513; /* SPA_MAXBLOCKSIZE + 1; */	/* force gang blocks */
+
 /*
  * The in-core space map representation is more compact than its on-disk form.
  * The zfs_condense_pct determines how much more compact the in-core

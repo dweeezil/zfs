@@ -46,6 +46,10 @@
 #include <sys/abd.h>
 #include <sys/dsl_crypt.h>
 
+#ifndef _KERNEL
+int gang_max_depth;
+#endif
+
 /*
  * ==========================================================================
  * I/O type descriptions
@@ -2390,6 +2394,9 @@ zio_gang_node_alloc(zio_gang_node_t **gnpp)
 
 	gn = kmem_zalloc(sizeof (*gn), KM_SLEEP);
 	gn->gn_gbh = zio_buf_alloc(SPA_GANGBLOCKSIZE);
+#ifndef _KERNEL
+	gn->gn_depth = 1;
+#endif
 	*gnpp = gn;
 
 	return (gn);
@@ -2442,6 +2449,10 @@ zio_gang_tree_assemble_done(zio_t *zio)
 	zio_t *gio = zio->io_gang_leader;
 	zio_gang_node_t *gn = zio->io_private;
 	blkptr_t *bp = zio->io_bp;
+	int g;
+#ifndef _KERNEL
+	boolean_t deepened = B_FALSE;
+#endif
 
 	ASSERT(gio == zio_unique_parent(zio));
 	ASSERT(zio->io_child_count == 0);
@@ -2464,6 +2475,14 @@ zio_gang_tree_assemble_done(zio_t *zio)
 		if (!BP_IS_GANG(gbp))
 			continue;
 		zio_gang_tree_assemble(gio, gbp, &gn->gn_child[g]);
+#ifndef _KERNEL
+		if (!deepened) {
+			++gn->gn_depth;
+			if (gn->gn_depth > gang_max_depth)
+				gang_max_depth = gn->gn_depth;
+			deepened = B_TRUE;
+		}
+#endif
 	}
 }
 
