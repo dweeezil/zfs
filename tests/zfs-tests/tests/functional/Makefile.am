@@ -43,6 +43,7 @@ SUBDIRS = \
 	no_space \
 	nopwrite \
 	online_offline \
+	pool_checkpoint \
 	pool_names \
 	poolversion \
 	privilege \
