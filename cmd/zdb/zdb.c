@@ -5040,7 +5040,9 @@ dump_zpool(spa_t *spa)
 	if (dump_opt['M'])
 		dump_metaslab_groups(spa);
 
-	if (dump_opt['d'] || dump_opt['i']) {
+	if (dump_opt['i'] == 2) {
+		dump_dtl(spa->spa_root_vdev, 0);
+	} else if (dump_opt['d'] || dump_opt['i']) {
 		spa_feature_t f;
 
 		dump_dir(dp->dp_meta_objset);
