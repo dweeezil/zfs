@@ -36,6 +36,8 @@
 #include <linux/mod_compat.h>
 #include <linux/msdos_fs.h>
 
+char *zfs_vdev_drop_completion = "<UNSET>";
+unsigned zfs_vdev_drop_completion_reset = 1;
 char *zfs_vdev_scheduler = VDEV_SCHEDULER;
 static void *zfs_vdev_holder = VDEV_HOLDER;
 
@@ -604,7 +606,15 @@ retry:
 
 		bio_set_dev(dr->dr_bio[i], bdev);
 		BIO_BI_SECTOR(dr->dr_bio[i]) = bio_offset >> 9;
-		dr->dr_bio[i]->bi_end_io = vdev_disk_physio_completion;
+		if (zio && zio->io_vd && zio->io_vd->vdev_path &&
+		    strcmp(zio->io_vd->vdev_path,
+		    zfs_vdev_drop_completion) == 0) {
+			dr->dr_bio[i]->bi_end_io = NULL;
+			if (zfs_vdev_drop_completion_reset)
+				zfs_vdev_drop_completion = "<UNSET>";
+		} else {
+			dr->dr_bio[i]->bi_end_io = vdev_disk_physio_completion;
+		}
 		dr->dr_bio[i]->bi_private = dr;
 		bio_set_op_attrs(dr->dr_bio[i], rw, flags);
 
@@ -891,3 +901,11 @@ vdev_ops_t vdev_disk_ops = {
 module_param_call(zfs_vdev_scheduler, param_set_vdev_scheduler,
     param_get_charp, &zfs_vdev_scheduler, 0644);
 MODULE_PARM_DESC(zfs_vdev_scheduler, "I/O scheduler");
+
+module_param(zfs_vdev_drop_completion, charp, 0644);
+MODULE_PARM_DESC(zfs_vdev_drop_completion,
+    "Vdev from which to drop a completion");
+
+module_param(zfs_vdev_drop_completion_reset, uint, 0644);
+MODULE_PARM_DESC(zfs_vdev_drop_completion_reset,
+    "Non-zero to reset zfs_vdev_drop_completion after use");
