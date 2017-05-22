@@ -55,4 +55,5 @@ SUBDIRS = \
 	zpool_split \
 	zpool_status \
 	zpool_sync \
+	zpool_trim \
 	zpool_upgrade
