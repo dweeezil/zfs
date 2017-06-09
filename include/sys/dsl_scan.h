@@ -181,6 +181,13 @@ void dsl_scan_freed(spa_t *spa, const blkptr_t *bp);
 void dsl_scan_io_queue_destroy(dsl_scan_io_queue_t *queue);
 void dsl_scan_io_queue_vdev_xfer(vdev_t *svd, vdev_t *tvd);
 
+/* Add parameters used by 'zhack scrub' here to avoid type mismatches */
+extern enum ddt_class zfs_scrub_ddt_class_max;
+extern int            zfs_scan_checkpoint_intval;
+extern int            zfs_scan_direct;
+extern uint64_t       zfs_scan_max_ext_gap;
+extern int            zfs_no_scrub_prefetch;
+
 #ifdef	__cplusplus
 }
 #endif

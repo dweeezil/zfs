@@ -44,12 +44,14 @@
 #include <sys/fs/zfs.h>
 #include <sys/dmu_objset.h>
 #include <sys/dsl_pool.h>
+#include <sys/dsl_scan.h>
 #include <sys/zio_checksum.h>
 #include <sys/zio_compress.h>
 #include <sys/zfeature.h>
 #include <sys/dmu_tx.h>
 #include <libzfs.h>
 
+extern int reference_tracking_enable;
 extern boolean_t zfeature_checks_disable;
 
 const char cmdname[] = "zhack";
@@ -77,6 +79,7 @@ usage(void)
 	    "        change the refcount on the given feature\n"
 	    "        -d decrease instead of increase the refcount\n"
 	    "        -m add the feature to the label if increasing refcount\n"
+	    "    scrub [-D <ddt_class>] [-i scan_interval] [-G gap] [-EPRTnrv] <pool>\n"
 	    "\n"
 	    "    <feature> : should be a feature guid\n");
 	exit(1);
@@ -480,6 +483,267 @@ zhack_do_feature(int argc, char **argv)
 	return (0);
 }
 
+static void
+zhack_print_vdev(char *name, nvlist_t *nv, int depth)
+{
+	nvlist_t **child;
+	uint_t c, children;
+
+	vdev_stat_t *vs;
+	char *state;
+
+	if (nvlist_lookup_nvlist_array(nv, ZPOOL_CONFIG_CHILDREN,
+	    &child, &children) != 0)
+		children = 0;
+
+	if (nvlist_lookup_uint64_array(nv, ZPOOL_CONFIG_VDEV_STATS,
+	    (uint64_t **)&vs, &c) == 0) {
+		state = zpool_state_to_name(vs->vs_state, vs->vs_aux);
+	} else {
+		state = "(No status)";
+	}
+
+	(void) fprintf(stderr, "\t%*s%s %s\n", depth, "", name, state);
+
+	for (c = 0; c < children; c++) {
+		char *vname;
+		uint64_t islog = B_FALSE, ishole = B_FALSE;
+
+		/* Don't print logs or holes here */
+		(void) nvlist_lookup_uint64(child[c], ZPOOL_CONFIG_IS_LOG,
+		    &islog);
+		(void) nvlist_lookup_uint64(child[c], ZPOOL_CONFIG_IS_HOLE,
+		    &ishole);
+		if (islog || ishole)
+			continue;
+
+		vname = zpool_vdev_name(g_zfs, NULL, child[c],
+		    VDEV_NAME_TYPE_ID);
+		zhack_print_vdev(vname, child[c], depth + 2);
+		free(vname);
+	}
+}
+
+
+
+static int
+zhack_do_scrub(int argc, char **argv)
+{
+	int verbose = 0;
+	int do_ddt_reset = 0;
+	int do_resilver = 0;
+	int do_restart = 0;
+	int no_spawn = 0;
+	spa_t *spa = NULL;
+	dsl_pool_t *dp = NULL;
+	dsl_scan_t *scn = NULL;
+	int c;
+
+	// Scan the entire DDT
+	zfs_scrub_ddt_class_max = DDT_CLASS_UNIQUE;
+
+	// Disable reference tracking debugging
+	reference_tracking_enable = B_FALSE;
+
+	// Disable prefetch during scan
+	zfs_no_scrub_prefetch = B_TRUE;
+
+	zfs_scan_direct = B_FALSE;
+
+	while ((c = getopt(argc, argv, "D:EG:PRTi:nrv")) != -1) {
+		switch (c) {
+		case 'D':
+			// How much of the DDT are we scanning?
+		{
+			char *endptr = NULL;
+			unsigned long class =
+			    strtoul(optarg, &endptr, 0);
+			if ((errno == 0) && (*endptr == '\0') &&
+			    (class < DDT_CLASSES)) {
+				zfs_scrub_ddt_class_max = class;
+			} else {
+				fatal(NULL, FTAG, "DDT class must be between "
+				    "0 and %d, inclusive", DDT_CLASSES-1);
+			}
+		}
+		break;
+		case 'E':
+			// Forcibly reset DDT class max after import
+			do_ddt_reset++;
+			break;
+		case 'G':
+		{
+			char *endptr = NULL;
+			uint64_t gap = strtoul(optarg, &endptr, 0);
+			if ((errno == 0) && (*endptr == '\0')) {
+				zfs_scan_max_ext_gap = gap;
+			} else {
+				fatal(NULL, FTAG, "Bad range tree gap (-G)");
+			}
+		}
+		break;
+		case 'P':
+			// Turn prefetching back on
+			zfs_no_scrub_prefetch = B_FALSE;
+			break;
+		case 'R':
+			// Restart a scrub
+			do_restart++;
+			break;
+		case 'T':
+			// Turn reference tracking back on
+			reference_tracking_enable = B_TRUE;
+			break;
+		case 'i':
+		{
+			char *endptr = NULL;
+			uint64_t intval = strtoul(optarg, &endptr, 0);
+			if ((errno == 0) && (*endptr == '\0')) {
+				zfs_scan_checkpoint_intval = intval;
+			} else {
+				fatal(NULL, FTAG, "Bad scan interval (-i)");
+			}
+		}
+		break;
+		case 'n':
+			// Don't launch a scrub, just resume one
+			no_spawn++;
+			break;
+		case 'r':
+			// Resilver instead of scrub
+			do_resilver++;
+			break;
+		case 'v':
+			// Be chatty
+			verbose++;
+			break;
+		case '?':
+			fatal(NULL, FTAG, "invalid option '%c'", optopt);
+		}
+	}
+
+	if (optind == argc) {
+		fatal(NULL, FTAG, "Need pool name");
+	}
+	if (optind + 1 < argc) {
+		(void) fprintf(stderr,
+		    "WARNING: Discarding excess arguments\n");
+	}
+	if (no_spawn && (do_resilver || do_restart)) {
+		fatal(NULL, FTAG, "-n is incompatible with -[Rr]");
+	}
+
+	if (verbose && (g_importargs.paths != 0)) {
+		int sdix = 0;
+		fprintf(stderr, "Will search:\n");
+		for (sdix = 0; sdix < g_importargs.paths; sdix++) {
+			fprintf(stderr, "\t%s\n", g_importargs.path[sdix]);
+		}
+	}
+
+	zhack_spa_open(argv[optind], B_FALSE, B_FALSE, B_TRUE, FTAG, &spa);
+	dp = spa->spa_dsl_pool;
+	scn = dp->dp_scan;
+
+	if (verbose) {
+		nvlist_t *nvroot;
+		nvlist_t *config;
+
+		fprintf(stderr, "Found pool; vdev tree:\n");
+		config = spa_config_generate(spa, NULL, -1, 1);
+		VERIFY(config);
+
+		VERIFY3U(nvlist_lookup_nvlist(config,
+		    ZPOOL_CONFIG_VDEV_TREE, &nvroot), ==, 0);
+		zhack_print_vdev(g_importargs.poolname, nvroot, 0);
+
+		nvlist_free(config);
+
+		if (verbose >= 2) {
+			spa->spa_debug = B_TRUE;
+		}
+	}
+
+
+	if (do_restart) {
+		if (verbose) {
+			fprintf(stderr, "First, cancelling any existing scrub...\n");
+		}
+		dsl_scan_cancel(dp);
+	}
+
+	if (no_spawn) {
+		if (scn->scn_phys.scn_state == DSS_FINISHED) {
+			fprintf(stderr, "No scrub to resume.\n");
+			goto out;
+		}
+	} else {
+		if (verbose) {
+			fprintf(stderr, "Kicking off %s...\n",
+			    do_resilver ? "resilver" : "scrub");
+		}
+		spa_scan(spa,
+		    do_resilver ? POOL_SCAN_RESILVER : POOL_SCAN_SCRUB);
+
+		if (do_resilver && scn->scn_phys.scn_state == DSS_FINISHED) {
+			fprintf(stderr, "No need to resilver.\n");
+			goto out;
+		}
+	}
+
+	if (do_ddt_reset) {
+		if (verbose) {
+			fprintf(stderr,"Forcibly resetting DDT scan class\n");
+		}
+		scn->scn_phys.scn_ddt_class_max = zfs_scrub_ddt_class_max;
+	}
+
+
+	do {
+		txg_wait_synced(dp, 0);
+		dsl_scan_phys_t *scnp = &scn->scn_phys;
+
+		uint64_t now = (uint64_t)(time(NULL));
+
+		fprintf(stderr,
+		    "Scrub: ts=%" PRIu64 "(elacp=%" PRIu64 ") txg=%-15" PRIu64
+		    " state=%" PRIu64 " sort=%d pflags=%" PRIu64 " cl=%d cp=%d"
+		    " toex=%-15" PRIu64 " exd=%-15" PRIu64 " pend=%-15" PRIu64
+		    " pr=%-15" PRIu64 " err=%" PRIu64
+		    " ddtbook=%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIx64
+		    " zbook=%" PRIu64 "/%" PRIu64 "/%" PRId64 "/%" PRIu64
+		    "\n",
+		    now,
+		    now - scn->scn_last_checkpoint,
+		    dp->dp_tx.tx_open_txg,
+		    scnp->scn_state,
+		    scn->scn_is_sorted,
+		    scnp->scn_flags,
+		    scn->scn_clearing,
+		    scn->scn_checkpointing,
+		    scnp->scn_to_examine,
+		    scnp->scn_examined,
+		    scn->scn_bytes_pending,
+		    scnp->scn_processed,
+		    scnp->scn_errors,
+		    scnp->scn_ddt_bookmark.ddb_class,
+		    scnp->scn_ddt_bookmark.ddb_type,
+		    scnp->scn_ddt_bookmark.ddb_checksum,
+		    scnp->scn_ddt_bookmark.ddb_cursor,
+		    scnp->scn_bookmark.zb_objset,
+		    scnp->scn_bookmark.zb_object,
+		    scnp->scn_bookmark.zb_level,
+		    scnp->scn_bookmark.zb_blkid);
+
+	} while (spa->spa_dsl_pool->dp_scan->scn_phys.scn_state
+	    != DSS_FINISHED);
+
+out:
+	spa_close(spa, FTAG);
+
+	return (0);
+}
+
 #define	MAX_NUM_PATHS 1024
 
 int
@@ -525,6 +789,8 @@ main(int argc, char **argv)
 
 	if (strcmp(subcommand, "feature") == 0) {
 		rv = zhack_do_feature(argc, argv);
+	} else if (strcmp(subcommand, "scrub") == 0) {
+		rv = zhack_do_scrub(argc, argv);
 	} else {
 		(void) fprintf(stderr, "error: unknown subcommand: %s\n",
 		    subcommand);
