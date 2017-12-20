@@ -1413,9 +1413,7 @@ zpool_add(zpool_handle_t *zhp, nvlist_t *nvroot)
 		case EINVAL:
 			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
 			    "invalid config; a pool with removing/removed "
-			    "vdevs does not support adding raidz vdevs "
-			    "or a top level mirror must be a "
-			    "mirror of leaf vdevs only"));
+			    "vdevs does not support adding raidz vdevs"));
 			(void) zfs_error(hdl, EZFS_BADDEV, msg);
 			break;
 

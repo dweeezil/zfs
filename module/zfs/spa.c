@@ -4836,9 +4836,7 @@ spa_vdev_add(spa_t *spa, nvlist_t *nvroot)
 	 * If we are in the middle of a device removal, we can only add
 	 * devices which match the existing devices in the pool.
 	 * If we are in the middle of a removal, or have some indirect
-	 * vdevs, we can not add raidz toplevels.  This ensures that
-	 * we do not rely on resilver, which does not properly handle
-	 * indirect vdevs.
+	 * vdevs, we can not add raidz toplevels.
 	 */
 	if (spa->spa_vdev_removal != NULL ||
 	    spa->spa_removing_phys.sr_prev_indirect_vdev != -1) {
@@ -6807,7 +6805,8 @@ spa_sync(spa_t *spa, uint64_t txg)
 		if (spa->spa_vdev_removal != NULL)
 			svr_sync(spa, tx);
 
-		while ((vd = txg_list_remove(&spa->spa_vdev_txg_list, txg)))
+		while ((vd = txg_list_remove(&spa->spa_vdev_txg_list, txg))
+		    != NULL)
 			vdev_sync(vd, txg);
 
 		if (pass == 1) {
