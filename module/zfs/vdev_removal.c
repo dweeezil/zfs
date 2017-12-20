@@ -435,6 +435,9 @@ spa_restart_removal(spa_t *spa)
 	if (svr->svr_thread != NULL)
 		return;
 
+	if (!spa_writeable(spa))
+		return;
+
 	vdev_t *vd = svr->svr_vdev;
 	vdev_indirect_mapping_t *vim = vd->vdev_indirect_mapping;
 
@@ -1210,10 +1213,6 @@ spa_vdev_remove_thread(void *arg)
 			 * ms_sm's sm_length and sm_alloc may not reflect
 			 * what's in the object contents, if we are in between
 			 * metaslab_sync() and metaslab_sync_done().
-			 *
-			 * Note: space_map_open() drops and reacquires the
-			 * caller-provided lock.  Therefore we can not provide
-			 * any lock that we are using (e.g. ms_lock, svr_lock).
 			 */
 			VERIFY0(space_map_open(&sm,
 			    spa->spa_dsl_pool->dp_meta_objset,
