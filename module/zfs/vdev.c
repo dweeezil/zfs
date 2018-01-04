@@ -2956,6 +2956,12 @@ vdev_clear(spa_t *spa, vdev_t *vd)
 		vdev_clear(spa, vd->vdev_child[c]);
 
 	/*
+	 * It makes no sense to "clear" an indirect vdev.
+	 */
+	if (!vdev_is_concrete(vd))
+		return;
+
+	/*
 	 * If we're in the FAULTED state or have experienced failed I/O, then
 	 * clear the persistent state and attempt to reopen the device.  We
 	 * also mark the vdev config dirty, so that the new faulted state is
