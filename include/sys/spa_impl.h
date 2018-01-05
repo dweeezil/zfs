@@ -46,6 +46,7 @@
 #include <sys/dsl_crypt.h>
 #include <sys/zfeature.h>
 #include <zfeature_common.h>
+#include <sys/sysevent.h>
 
 #ifdef	__cplusplus
 extern "C" {
