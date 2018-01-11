@@ -4182,7 +4182,8 @@ dbuf_remap(dnode_t *dn, dmu_buf_impl_t *db, dmu_tx_t *tx)
 		dnode_phys_t *dnp = db->db.db_data;
 		ASSERT3U(db->db_dnode_handle->dnh_dnode->dn_type, ==,
 		    DMU_OT_DNODE);
-		for (int i = 0; i < db->db.db_size >> DNODE_SHIFT; i++) {
+		for (int i = 0; i < db->db.db_size >> DNODE_SHIFT;
+		    i += dnp[i].dn_extra_slots + 1) {
 			for (int j = 0; j < dnp[i].dn_nblkptr; j++) {
 				dbuf_remap_impl(dn, &dnp[i].dn_blkptr[j], tx);
 			}
