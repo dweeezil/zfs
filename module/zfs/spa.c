@@ -4953,10 +4953,8 @@ spa_vdev_attach(spa_t *spa, uint64_t guid, nvlist_t *nvroot, int replacing)
 
 	oldvd = spa_lookup_by_guid(spa, guid, B_FALSE);
 
-	if (spa->spa_vdev_removal != NULL ||
-	    spa->spa_removing_phys.sr_prev_indirect_vdev != -1) {
+	if (spa->spa_vdev_removal != NULL)
 		return (spa_vdev_exit(spa, NULL, txg, EBUSY));
-	}
 
 	if (oldvd == NULL)
 		return (spa_vdev_exit(spa, NULL, txg, ENODEV));
