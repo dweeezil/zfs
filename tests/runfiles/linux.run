@@ -381,6 +381,21 @@ pre =
 post =
 tags = ['functional', 'cli_root', 'zpool_labelclear']
 
+[tests/functional/cli_root/zpool_ini]
+tests = ['zpool_ini_att_det_add_rm',
+    'zpool_ini_import_export',
+    'zpool_ini_offln_exp_imp_onl',
+    'zpool_ini_online_offline',
+    'zpool_ini_split',
+    'zpool_ini_start_and_cancel_neg',
+    'zpool_ini_start_and_cancel_pos',
+    'zpool_ini_suspend_resume',
+    'zpool_ini_unsupported_vdevs',
+    'zpool_ini_verify_checksums',
+    'zpool_ini_verify_initialized']
+pre =
+tags = ['functional', 'cli_root', 'zpool_ini', 'zpool_initialize']
+
 [tests/functional/cli_root/zpool_offline]
 tests = ['zpool_offline_001_pos', 'zpool_offline_002_neg',
     'zpool_offline_003_pos']
