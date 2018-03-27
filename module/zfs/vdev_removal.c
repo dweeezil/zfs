@@ -1295,7 +1295,6 @@ spa_vdev_remove_thread(void *arg)
 
 	mutex_exit(&svr->svr_lock);
 
-	/* XXX drop config lock */
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
 	/*
