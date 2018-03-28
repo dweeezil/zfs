@@ -1250,7 +1250,7 @@ spa_vdev_remove_thread(void *arg)
 
 			mutex_exit(&svr->svr_lock);
 
- 			/*
+			/*
 			 * We need to periodically drop the config lock so that
 			 * writers can get in.  Additionally, we can't wait
 			 * for a txg to sync while holding a config lock
