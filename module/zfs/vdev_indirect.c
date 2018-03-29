@@ -1274,14 +1274,11 @@ vdev_indirect_checksum_error(zio_t *zio,
 	vd->vdev_stat.vs_checksum_errors++;
 	mutex_exit(&vd->vdev_stat_lock);
 
-	zio_bad_cksum_t zbc = { 0 };
-	void *bad_buf = abd_borrow_buf_copy(ic->ic_data, is->is_size);
+	zio_bad_cksum_t zbc = {{{ 0 }}};
+	abd_t *bad_abd = ic->ic_data;
 	abd_t *good_abd = is->is_child[is->is_good_child].ic_data;
-	void *good_buf = abd_borrow_buf_copy(good_abd, is->is_size);
 	zfs_ereport_post_checksum(zio->io_spa, vd, NULL, zio,
-	    is->is_target_offset, is->is_size, good_buf, bad_buf, &zbc);
-	abd_return_buf(ic->ic_data, bad_buf, is->is_size);
-	abd_return_buf(good_abd, good_buf, is->is_size);
+	    is->is_target_offset, is->is_size, good_abd, bad_abd, &zbc);
 }
 
 /*
