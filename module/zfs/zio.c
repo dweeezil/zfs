@@ -3470,7 +3470,7 @@ zio_vdev_io_start(zio_t *zio)
 		 */
 		ASSERT(zio->io_flags &
 		    (ZIO_FLAG_PHYSICAL | ZIO_FLAG_SELF_HEAL |
-		    ZIO_FLAG_INDUCE_DAMAGE));
+		    ZIO_FLAG_RESILVER | ZIO_FLAG_INDUCE_DAMAGE));
 	}
 
 	align = 1ULL << vd->vdev_top->vdev_ashift;
