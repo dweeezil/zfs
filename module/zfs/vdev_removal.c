@@ -44,6 +44,7 @@
 #include <sys/vdev_indirect_births.h>
 #include <sys/vdev_indirect_mapping.h>
 #include <sys/abd.h>
+#include <sys/trace_vdev.h>
 
 /*
  * This file contains the necessary logic to remove vdevs from a
