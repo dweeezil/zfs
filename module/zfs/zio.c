@@ -1653,7 +1653,7 @@ zio_deadman_impl(zio_t *pio)
 		    zb->zb_objset, zb->zb_object, zb->zb_level, zb->zb_blkid,
 		    pio->io_offset, pio->io_size, pio->io_error);
 		zfs_ereport_post(FM_EREPORT_ZFS_DEADMAN,
-		    pio->io_spa, vd, zb, pio, 0, 0);
+		    pio->io_spa, vd, pio, 0, 0);
 
 		if (failmode == ZIO_FAILURE_MODE_CONTINUE &&
 		    taskq_empty_ent(&pio->io_tqent)) {

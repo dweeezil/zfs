@@ -6438,8 +6438,8 @@ ztest_run(ztest_shared_t *zs)
 	/*
 	 * Create a deadman thread and set to panic if we hang.
 	 */
-	(void) thread_create(NULL, 0, ztest_deadman_thread,
-	    zs, 0, NULL, TS_RUN | TS_JOINABLE, defclsyspri);
+	(void) zk_thread_create(NULL, 0, (thread_func_t)ztest_deadman_thread,
+	    zs, 0, NULL, TS_RUN, 0, PTHREAD_CREATE_JOINABLE);
 
 	spa->spa_deadman_failmode = ZIO_FAILURE_MODE_PANIC;
 
