@@ -417,6 +417,8 @@ zio_walk_children(zio_t *pio, zio_link_t **zl)
 {
 	list_t *cl = &pio->io_child_list;
 
+	ASSERT(MUTEX_HELD(&pio->io_lock));
+
 	*zl = (*zl == NULL) ? list_head(cl) : list_next(cl, *zl);
 	if (*zl == NULL)
 		return (NULL);
@@ -452,8 +454,8 @@ zio_add_child(zio_t *pio, zio_t *cio)
 	zl->zl_parent = pio;
 	zl->zl_child = cio;
 
-	mutex_enter(&cio->io_lock);
 	mutex_enter(&pio->io_lock);
+	mutex_enter(&cio->io_lock);
 
 	ASSERT(pio->io_state[ZIO_WAIT_DONE] == 0);
 
@@ -466,8 +468,8 @@ zio_add_child(zio_t *pio, zio_t *cio)
 	pio->io_child_count++;
 	cio->io_parent_count++;
 
-	mutex_exit(&pio->io_lock);
 	mutex_exit(&cio->io_lock);
+	mutex_exit(&pio->io_lock);
 }
 
 static void
@@ -476,8 +478,8 @@ zio_remove_child(zio_t *pio, zio_t *cio, zio_link_t *zl)
 	ASSERT(zl->zl_parent == pio);
 	ASSERT(zl->zl_child == cio);
 
-	mutex_enter(&cio->io_lock);
 	mutex_enter(&pio->io_lock);
+	mutex_enter(&cio->io_lock);
 
 	list_remove(&pio->io_child_list, zl);
 	list_remove(&cio->io_parent_list, zl);
@@ -485,8 +487,8 @@ zio_remove_child(zio_t *pio, zio_t *cio, zio_link_t *zl)
 	pio->io_child_count--;
 	cio->io_parent_count--;
 
-	mutex_exit(&pio->io_lock);
 	mutex_exit(&cio->io_lock);
+	mutex_exit(&pio->io_lock);
 	kmem_cache_free(zio_link_cache, zl);
 }
 
@@ -1929,14 +1931,14 @@ zio_reexecute(zio_t *pio)
 	 * the remainder of pio's io_child_list, from 'cio_next' onward,
 	 * cannot be affected by any side effects of reexecuting 'cio'.
 	 */
+	mutex_enter(&pio->io_lock);
 	for (cio = zio_walk_children(pio, &zl); cio != NULL; cio = cio_next) {
 		cio_next = zio_walk_children(pio, &zl);
-		mutex_enter(&pio->io_lock);
 		for (w = 0; w < ZIO_WAIT_TYPES; w++)
 			pio->io_children[cio->io_child_type][w]++;
-		mutex_exit(&pio->io_lock);
 		zio_reexecute(cio);
 	}
+	mutex_exit(&pio->io_lock);
 
 	/*
 	 * Now that all children have been reexecuted, execute the parent.
