@@ -23,6 +23,10 @@
 
 zdbout=${TMPDIR:-$TEST_BASE_DIR}/zdbout.$$
 
+if is_linux; then
+	log_unsupported "ZDB fails during concurrent pool activity."
+fi
+
 function cleanup
 {
 	default_cleanup_noexit
@@ -31,27 +35,44 @@ function cleanup
 
 default_setup_noexit "$DISKS"
 log_onexit cleanup
+FIRSTDISK=${DISKS%% *}
+
+DISKPATH=/dev
+case $FIRSTDISK in
+	/*)
+		DISKPATH=$(dirname $FIRSTDISK)
+		;;
+esac
 
 function callback
 {
 	typeset count=$1
-	if (( count == 0 )); then
-		if ! ksh -c "zdb -cudi $TESTPOOL >$zdbout 2>&1"; then
-			log_note "Output: zdb -cudi $TESTPOOL"
-			cat $zdbout
-			log_fail "zdb detected errors."
-		fi
-		log_note "zdb -cudi $TESTPOOL >zdbout 2>&1"
+	typeset zdbstat
+
+	log_must zpool set cachefile=none $TESTPOOL
+	zdb -e -p $DISKPATH -cudi $TESTPOOL >$zdbout 2>&1
+	zdbstat=$?
+	log_must zpool set cachefile= $TESTPOOL
+	if [[ $zdbstat != 0 ]]; then
+		log_note "Output: zdb -e -p $DISKPATH -cudi $TESTPOOL"
+		cat $zdbout
+		log_note "zdb detected errors with exist status $zdbstat."
 	fi
+	log_note "zdb -e -p $DISKPATH -cudi $TESTPOOL >zdbout 2>&1"
 	return 0
 }
 
 test_removal_with_operation callback
 
-if ! ksh -c "zdb -cudi $TESTPOOL >$zdbout 2>&1"; then
-	log_note "Output: zdb -cudi $TESTPOOL"
+log_must zpool set cachefile=none $TESTPOOL
+zdb -e -p $DISKPATH -cudi $TESTPOOL >$zdbout 2>&1
+zdbstat=$?
+log_must zpool set cachefile= $TESTPOOL
+if [[ $zdbstat != 0 ]]; then
+	log_note "Output following removal: zdb -cudi $TESTPOOL"
 	cat $zdbout
-	log_fail "zdb detected errors."
+	log_fail "zdb detected errors with exit status " \
+	    "$zdbstat following removal."
 fi
 
 log_pass "Can use zdb during removal"
