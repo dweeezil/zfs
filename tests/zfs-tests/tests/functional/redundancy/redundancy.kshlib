@@ -226,9 +226,9 @@ function replace_missing_devs
 
 	typeset vdev
 	for vdev in $@; do
-		log_must gnudd if=/dev/zero of=$vdev \
-		    bs=1024k count=$(($MINDEVSIZE / (1024 * 1024))) \
-		    oflag=fdatasync
+		log_must dd if=/dev/zero of=$vdev \
+		    bs=1024k count=$(($MINVDEVSIZE / (1024 * 1024))) \
+		    conv=fdatasync
 		log_must zpool replace -f $pool $vdev $vdev
 		while true; do
 			if ! is_pool_resilvered $pool ; then
