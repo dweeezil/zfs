@@ -233,6 +233,7 @@ static avl_tree_t spa_namespace_avl;
 kmutex_t spa_namespace_lock;
 static kcondvar_t spa_namespace_cv;
 int spa_max_replication_override = SPA_DVAS_PER_BP;
+boolean_t spa_initted = B_FALSE;
 
 static kmutex_t spa_spare_lock;
 static avl_tree_t spa_spare_avl;
@@ -1939,6 +1940,7 @@ spa_init(int mode)
 	spa_config_load();
 	l2arc_start();
 	qat_init();
+	spa_initted = B_TRUE;
 }
 
 void
@@ -2164,10 +2166,12 @@ param_set_deadman_failmode(const char *val, zfs_kernel_param_t *kp)
 	    strcmp(val, "panic"))
 		return (SET_ERROR(-EINVAL));
 
-	mutex_enter(&spa_namespace_lock);
-	while ((spa = spa_next(spa)) != NULL)
-		spa_set_deadman_failmode(spa, val);
-	mutex_exit(&spa_namespace_lock);
+	if (spa_initted) {
+		mutex_enter(&spa_namespace_lock);
+		while ((spa = spa_next(spa)) != NULL)
+			spa_set_deadman_failmode(spa, val);
+		mutex_exit(&spa_namespace_lock);
+	}
 
 	return (param_set_charp(val, kp));
 }
