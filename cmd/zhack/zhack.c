@@ -490,7 +490,7 @@ zhack_print_vdev(char *name, nvlist_t *nv, int depth)
 	uint_t c, children;
 
 	vdev_stat_t *vs;
-	char *state;
+	const char *state;
 
 	if (nvlist_lookup_nvlist_array(nv, ZPOOL_CONFIG_CHILDREN,
 	    &child, &children) != 0)
@@ -547,8 +547,6 @@ zhack_do_scrub(int argc, char **argv)
 
 	// Disable prefetch during scan
 	zfs_no_scrub_prefetch = B_TRUE;
-
-	zfs_scan_direct = B_FALSE;
 
 	while ((c = getopt(argc, argv, "D:EG:PRTi:nrv")) != -1) {
 		switch (c) {
@@ -658,12 +656,7 @@ zhack_do_scrub(int argc, char **argv)
 		zhack_print_vdev(g_importargs.poolname, nvroot, 0);
 
 		nvlist_free(config);
-
-		if (verbose >= 2) {
-			spa->spa_debug = B_TRUE;
-		}
 	}
-
 
 	if (do_restart) {
 		if (verbose) {
