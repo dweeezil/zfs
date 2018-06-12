@@ -41,14 +41,8 @@ ismounted "$TESTPOOL/$TESTFS"
 
 destroy_pool $TESTPOOL
 
-if is_mpath_device $DISK; then
+if ( is_mpath_device $DISK || is_loop_device $DISK ); then
 	delete_partitions
 fi
-
-#
-# Remove 100mb partition.
-#
-create_pool dummy$$ "$DISK"
-destroy_pool dummy$$
 
 log_pass
