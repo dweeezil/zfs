@@ -3009,9 +3009,11 @@ ztest_vdev_add_remove(ztest_ds_t *zd, uint64_t id)
 
 		switch (error) {
 		case 0:
-		case EEXIST:
 		case ZFS_ERR_CHECKPOINT_EXISTS:
 		case ZFS_ERR_DISCARDING_CHECKPOINT:
+		case EEXIST:	/* Generic zil_reset() error */
+		case EBUSY:	/* Replay required */
+		case EACCES:	/* Crypto key not loaded */
 			break;
 		default:
 			fatal(0, "spa_vdev_remove() = %d", error);
