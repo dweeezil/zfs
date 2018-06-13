@@ -423,15 +423,26 @@ Default value: \fB10000\fR.
 .sp
 .ne 2
 .na
+\fBspa_min_slop\fR (int)
+.ad
+.RS 12n
+Minimum size allowed for the pool reserved space.  See \fBspa_slop_shift\fR.
+.sp
+Default value: \fB134,217,728\fR.
+.RE
+
+.sp
+.ne 2
+.na
 \fBspa_slop_shift\fR (int)
 .ad
 .RS 12n
-Normally, we don't allow the last 3.2% (1/(2^spa_slop_shift)) of space
-in the pool to be consumed.  This ensures that we don't run the pool
-completely out of space, due to unaccounted changes (e.g. to the MOS).
-It also limits the worst-case time to allocate space.  If we have
-less than this amount of free space, most ZPL operations (e.g. write,
-create) will return ENOSPC.
+Normally, we don't allow the last 3.2% (1/(2^spa_slop_shift)) or 128MiB
+(\fBspa_min_slop\fR) of space in the pool, whichever is greater, to
+be consumed.  This ensures that we don't run the pool completely out of
+space, due to unaccounted changes (e.g. to the MOS).  It also limits the
+worst-case time to allocate space.  If we have less than this amount of
+free space, most ZPL operations (e.g. write, create) will return ENOSPC.
 .sp
 Default value: \fB5\fR.
 .RE

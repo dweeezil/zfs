@@ -374,7 +374,7 @@ int spa_asize_inflation = 24;
  * See also the comments in zfs_space_check_t.
  */
 int spa_slop_shift = 5;
-uint64_t spa_min_slop = 128 * 1024 * 1024;
+unsigned long spa_min_slop = 128 * 1024 * 1024;
 
 /*PRINTFLIKE2*/
 void
@@ -2557,5 +2557,8 @@ MODULE_PARM_DESC(spa_asize_inflation,
 
 module_param(spa_slop_shift, int, 0644);
 MODULE_PARM_DESC(spa_slop_shift, "Reserved free space in pool");
+
+module_param(spa_min_slop, ulong, 0644);
+MODULE_PARM_DESC(spa_min_slop, "Minimum size of reserved free space");
 /* END CSTYLED */
 #endif

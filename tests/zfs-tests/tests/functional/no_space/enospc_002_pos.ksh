@@ -30,30 +30,30 @@ verify_runnable "both"
 
 function cleanup
 {
+	log_must set_tunable32 spa_slop_shift 5
+	log_must set_tunable32 spa_min_slop $((128 * 1024 * 1024))
 	zfs umount $TESTDIR
 }
 
 log_onexit cleanup
 
 log_assert "ENOSPC is returned when file system is full."
-
+sync
 log_must zfs set compression=off $TESTPOOL/$TESTFS
 log_must zfs snapshot $TESTPOOL/$TESTFS@snap
 
-# Create several files in an attempt to fill the pool.  The error
-# returned for the final file must be ENOSPC.  The reason to create
-# multiple files is that metaslab condensing may free up additional
-# space after the first file fills the pool.
-for name in $TESTFILES ; do
-	log_note "Writing file: $name until an error is returned."
-	file_write -o create -f $TESTDIR/$name -b $BLOCKSZ \
-	    -c $NUM_WRITES -d $DATA
-	ret=$?
-	log_must sync_pool $TESTPOOL
-done
+log_must set_tunable32 spa_slop_shift 24
+log_must set_tunable32 spa_min_slop $((64 * 1024 * 1024))
+log_note "Writing file: $TESTFILE0 until ENOSPC."
+file_write -o create -f $TESTDIR/$TESTFILE0 -b $BLOCKSZ \
+    -c $NUM_WRITES -d $DATA
+ret=$?
+sync_pool $TESTPOOL
+log_must set_tunable32 spa_slop_shift 5
+log_must set_tunable32 spa_min_slop $((128 * 1024 * 1024))
 
 (( $ret != $ENOSPC )) && \
-    log_fail "$name returned: $ret rather than ENOSPC."
+    log_fail "$TESTFILE0 returned: $ret rather than ENOSPC."
 
 log_mustnot_expect space zfs create $TESTPOOL/$TESTFS/subfs
 log_mustnot_expect space zfs clone $TESTPOOL/$TESTFS@snap $TESTPOOL/clone
