@@ -55,6 +55,8 @@
 
 verify_runnable "global"
 
+log_unsupported "Disabled per the DISCLAIMER in the test"
+
 ZFS_TXG_TIMEOUT=""
 
 function custom_cleanup

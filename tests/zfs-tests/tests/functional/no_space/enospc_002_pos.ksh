@@ -28,6 +28,16 @@
 
 verify_runnable "both"
 
+log_unsupported "Test is known to fail and has also been whitelisted " \
+	" in illumos"
+
+function cleanup
+{
+	zfs umount $TESTDIR
+}
+
+log_onexit cleanup
+
 log_assert "ENOSPC is returned when file system is full."
 sync
 log_must zfs set compression=off $TESTPOOL/$TESTFS
