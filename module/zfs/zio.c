@@ -2449,7 +2449,6 @@ zio_gang_tree_assemble_done(zio_t *zio)
 	zio_t *gio = zio->io_gang_leader;
 	zio_gang_node_t *gn = zio->io_private;
 	blkptr_t *bp = zio->io_bp;
-	int g;
 #ifndef _KERNEL
 	boolean_t deepened = B_FALSE;
 #endif
