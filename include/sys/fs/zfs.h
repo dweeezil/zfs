@@ -1049,6 +1049,7 @@ typedef enum pool_initialize_func {
 	POOL_INITIALIZE_DO,
 	POOL_INITIALIZE_CANCEL,
 	POOL_INITIALIZE_SUSPEND,
+	POOL_INITIALIZE_REDO,
 	POOL_INITIALIZE_FUNCS
 } pool_initialize_func_t;
 
@@ -1285,6 +1286,7 @@ typedef enum {
  */
 #define	ZPOOL_INITIALIZE_COMMAND	"initialize_command"
 #define	ZPOOL_INITIALIZE_VDEVS		"initialize_vdevs"
+#define	ZPOOL_INITIALIZE_VALUE		"initialize_value"
 
 /*
  * Flags for ZFS_IOC_VDEV_SET_STATE

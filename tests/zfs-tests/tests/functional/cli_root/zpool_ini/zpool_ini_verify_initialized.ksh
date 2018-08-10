@@ -39,7 +39,6 @@
 
 function cleanup
 {
-	set_tunable64 zfs_initialize_value $ORIG_PATTERN
         zpool import -d $TESTDIR $TESTPOOL
 
         if datasetexists $TESTPOOL ; then
@@ -51,17 +50,13 @@ function cleanup
 }
 log_onexit cleanup
 
-# PATTERN is 0xdeadbeefdeadbeef
-PATTERN="16045690984833335023"
+PATTERN=deadbeefdeadbeef
 SMALLFILE="$TESTDIR/smallfile"
-
-ORIG_PATTERN=$(get_tunable zfs_initialize_value)
-log_must set_tunable64 zfs_initialize_value $PATTERN
 
 log_must mkdir "$TESTDIR"
 log_must mkfile $MINVDEVSIZE "$SMALLFILE"
 log_must zpool create $TESTPOOL "$SMALLFILE"
-log_must zpool initialize $TESTPOOL
+log_must zpool initialize -v 0x$PATTERN $TESTPOOL
 
 while [[ "$(initialize_progress $TESTPOOL $SMALLFILE)" -lt "100" ]]; do
         sleep 0.5

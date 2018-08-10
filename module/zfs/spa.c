@@ -6364,7 +6364,8 @@ spa_vdev_detach(spa_t *spa, uint64_t guid, uint64_t pguid, int replace_done)
 }
 
 int
-spa_vdev_initialize(spa_t *spa, uint64_t guid, uint64_t cmd_type)
+spa_vdev_initialize(spa_t *spa, uint64_t guid, uint64_t cmd_type,
+    uint64_t value)
 {
 	/*
 	 * We hold the namespace lock through the whole function
@@ -6401,7 +6402,8 @@ spa_vdev_initialize(spa_t *spa, uint64_t guid, uint64_t cmd_type)
 	 * a previous initialization process which has completed but
 	 * the thread is not exited.
 	 */
-	if (cmd_type == POOL_INITIALIZE_DO &&
+	if ((cmd_type == POOL_INITIALIZE_DO ||
+	    cmd_type == POOL_INITIALIZE_REDO) &&
 	    (vd->vdev_initialize_thread != NULL ||
 	    vd->vdev_top->vdev_removing)) {
 		mutex_exit(&vd->vdev_initialize_lock);
@@ -6422,6 +6424,8 @@ spa_vdev_initialize(spa_t *spa, uint64_t guid, uint64_t cmd_type)
 
 	switch (cmd_type) {
 	case POOL_INITIALIZE_DO:
+	case POOL_INITIALIZE_REDO:
+		vd->vdev_initialize_value = value;
 		vdev_initialize(vd);
 		break;
 	case POOL_INITIALIZE_CANCEL:

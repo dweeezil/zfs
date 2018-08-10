@@ -3796,7 +3796,8 @@ zfs_ioc_destroy(zfs_cmd_t *zc)
  *     vdevs: {
  *         guid 1, guid 2, ...
  *     },
- *     func: POOL_INITIALIZE_{CANCEL|DO|SUSPEND}
+ *     func: POOL_INITIALIZE_{CANCEL|DO|REDO|SUSPEND}
+ *     value: initialization value
  * }
  *
  * outnvl: {
@@ -3826,7 +3827,15 @@ zfs_ioc_pool_initialize(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 	}
 	if (!(cmd_type == POOL_INITIALIZE_CANCEL ||
 	    cmd_type == POOL_INITIALIZE_DO ||
+	    cmd_type == POOL_INITIALIZE_REDO ||
 	    cmd_type == POOL_INITIALIZE_SUSPEND)) {
+		spa_close(spa, FTAG);
+		return (SET_ERROR(EINVAL));
+	}
+
+	uint64_t value;
+	error = nvlist_lookup_uint64(innvl, ZPOOL_INITIALIZE_VALUE, &value);
+	if (error != 0) {
 		spa_close(spa, FTAG);
 		return (SET_ERROR(EINVAL));
 	}
@@ -3845,7 +3854,7 @@ zfs_ioc_pool_initialize(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 	    pair != NULL; pair = nvlist_next_nvpair(vdev_guids, pair)) {
 		uint64_t vdev_guid = fnvpair_value_uint64(pair);
 
-		error = spa_vdev_initialize(spa, vdev_guid, cmd_type);
+		error = spa_vdev_initialize(spa, vdev_guid, cmd_type, value);
 		if (error != 0) {
 			char guid_as_str[MAXNAMELEN];
 
