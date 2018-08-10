@@ -205,6 +205,7 @@ extern boolean_t zfs_compressed_arc_enabled;
 extern int zfs_abd_scatter_enabled;
 extern int dmu_object_alloc_chunk_shift;
 extern boolean_t zfs_force_some_double_word_sm_entries;
+uint64_t zfs_initialize_value = 0xdeadbeefdeadbeeeULL;
 
 static ztest_shared_opts_t *ztest_shared_opts;
 static ztest_shared_opts_t ztest_opts;
@@ -6368,7 +6369,7 @@ ztest_initialize(ztest_ds_t *zd, uint64_t id)
 	spa_config_exit(spa, SCL_VDEV, FTAG);
 
 	uint64_t cmd = ztest_random(POOL_INITIALIZE_FUNCS);
-	error = spa_vdev_initialize(spa, guid, cmd);
+	error = spa_vdev_initialize(spa, guid, cmd, zfs_initialize_value);
 	switch (cmd) {
 	case POOL_INITIALIZE_CANCEL:
 		if (ztest_opts.zo_verbose >= 4) {

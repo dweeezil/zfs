@@ -275,7 +275,7 @@ typedef struct splitflags {
  */
 extern int zpool_scan(zpool_handle_t *, pool_scan_func_t, pool_scrub_cmd_t);
 extern int zpool_initialize(zpool_handle_t *, pool_initialize_func_t,
-    nvlist_t *);
+    nvlist_t *, uint64_t);
 extern int zpool_clear(zpool_handle_t *, const char *, nvlist_t *);
 extern int zpool_reguid(zpool_handle_t *);
 extern int zpool_reopen_one(zpool_handle_t *, void *);

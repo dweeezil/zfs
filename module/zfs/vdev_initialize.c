@@ -39,15 +39,6 @@
  */
 int max_initialize_ms = 3;
 
-/*
- * Value that is written to disk during initialization.
- */
-#ifdef _ILP32
-unsigned long zfs_initialize_value = 0xdeadbeefUL;
-#else
-unsigned long zfs_initialize_value = 0xdeadbeefdeadbeeeULL;
-#endif
-
 /* maximum number of I/Os outstanding per leaf vdev */
 int zfs_initialize_limit = 1;
 
@@ -294,36 +285,32 @@ vdev_xlate(vdev_t *vd, const range_seg_t *logical_rs, range_seg_t *physical_rs)
 }
 
 /*
- * Callback to fill each ABD chunk with zfs_initialize_value. len must be
+ * Callback to fill each ABD chunk with the specified value. len must be
  * divisible by sizeof (uint64_t), and buf must be 8-byte aligned. The ABD
  * allocation will guarantee these for us.
  */
 /* ARGSUSED */
 static int
-vdev_initialize_block_fill(void *buf, size_t len, void *unused)
+vdev_initialize_block_fill(void *buf, size_t len, void *value)
 {
+	uint64_t val = *(uint64_t *)value;
+
 	ASSERT0(len % sizeof (uint64_t));
-#ifdef _ILP32
-	for (uint32_t i = 0; i < len; i += sizeof (uint32_t)) {
-		*(uint32_t *)((char *)(buf) + i) = zfs_initialize_value;
-	}
-#else
 	for (uint64_t i = 0; i < len; i += sizeof (uint64_t)) {
-		*(uint64_t *)((char *)(buf) + i) = zfs_initialize_value;
+		*(uint64_t *)((char *)(buf) + i) = val;
 	}
-#endif
 	return (0);
 }
 
 static abd_t *
-vdev_initialize_block_alloc(void)
+vdev_initialize_block_alloc(uint64_t value)
 {
 	/* Allocate ABD for filler data */
 	abd_t *data = abd_alloc_for_io(zfs_initialize_chunk_size, B_FALSE);
 
 	ASSERT0(zfs_initialize_chunk_size % sizeof (uint64_t));
 	(void) abd_iterate_func(data, 0, zfs_initialize_chunk_size,
-	    vdev_initialize_block_fill, NULL);
+	    vdev_initialize_block_fill, &value);
 
 	return (data);
 }
@@ -606,7 +593,8 @@ vdev_initialize_thread(void *arg)
 	vd->vdev_initialize_last_offset = 0;
 	vdev_initialize_load(vd);
 
-	abd_t *deadbeef = vdev_initialize_block_alloc();
+	abd_t *deadbeef =
+	    vdev_initialize_block_alloc(vd->vdev_initialize_value);
 
 	vd->vdev_initialize_tree = range_tree_create(NULL, NULL);
 
@@ -806,9 +794,4 @@ EXPORT_SYMBOL(vdev_xlate);
 EXPORT_SYMBOL(vdev_initialize_stop_all);
 EXPORT_SYMBOL(vdev_initialize);
 EXPORT_SYMBOL(vdev_initialize_stop);
-
-/* CSTYLED */
-module_param(zfs_initialize_value, ulong, 0644);
-MODULE_PARM_DESC(zfs_initialize_value,
-	"Value written during zpool initialize");
 #endif

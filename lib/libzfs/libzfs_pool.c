@@ -2067,7 +2067,7 @@ xlate_init_err(int err)
  */
 int
 zpool_initialize(zpool_handle_t *zhp, pool_initialize_func_t cmd_type,
-    nvlist_t *vds)
+    nvlist_t *vds, uint64_t value)
 {
 	char msg[1024];
 	libzfs_handle_t *hdl = zhp->zpool_hdl;
@@ -2105,7 +2105,7 @@ zpool_initialize(zpool_handle_t *zhp, pool_initialize_func_t cmd_type,
 	}
 
 	int err = lzc_initialize(zhp->zpool_name, cmd_type, vdev_guids,
-	    &errlist);
+	    &errlist, value);
 	fnvlist_free(vdev_guids);
 
 	if (err == 0) {

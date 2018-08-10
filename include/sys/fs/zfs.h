@@ -1285,6 +1285,7 @@ typedef enum {
  */
 #define	ZPOOL_INITIALIZE_COMMAND	"initialize_command"
 #define	ZPOOL_INITIALIZE_VDEVS		"initialize_vdevs"
+#define	ZPOOL_INITIALIZE_VALUE		"initialize_value"
 
 /*
  * Flags for ZFS_IOC_VDEV_SET_STATE

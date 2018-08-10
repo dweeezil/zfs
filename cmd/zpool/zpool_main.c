@@ -357,7 +357,8 @@ get_usage(zpool_help_t idx)
 	case HELP_REOPEN:
 		return (gettext("\treopen [-n] <pool>\n"));
 	case HELP_INITIALIZE:
-		return (gettext("\tinitialize [-cs] <pool> [<device> ...]\n"));
+		return (gettext("\tinitialize [-cs] [-v <value>] "
+		    "<pool> [<device> ...]\n"));
 	case HELP_SCRUB:
 		return (gettext("\tscrub [-s | -p] <pool> ...\n"));
 	case HELP_STATUS:
@@ -497,12 +498,13 @@ usage(boolean_t requested)
 }
 
 /*
- * zpool initialize [-cs] <pool> [<vdev> ...]
+ * zpool initialize [-cs] <pool> [-v <value>] [<vdev> ...]
  * Initialize all unused blocks in the specified vdevs, or all vdevs in the pool
  * if none specified.
  *
  *	-c	Cancel. Ends active initializing.
  *	-s	Suspend. Initializing can then be restarted with no flags.
+ *	-v	Specify value to be written to the vdev(s).
  */
 int
 zpool_do_initialize(int argc, char **argv)
@@ -512,15 +514,17 @@ zpool_do_initialize(int argc, char **argv)
 	zpool_handle_t *zhp;
 	nvlist_t *vdevs;
 	int err = 0;
+	uint64_t value = 0xdeadbeefdeadbeeeULL;
 
 	struct option long_options[] = {
 		{"cancel",	no_argument,		NULL, 'c'},
 		{"suspend",	no_argument,		NULL, 's'},
+		{"value",	no_argument,		NULL, 'v'},
 		{0, 0, 0, 0}
 	};
 
 	pool_initialize_func_t cmd_type = POOL_INITIALIZE_DO;
-	while ((c = getopt_long(argc, argv, "cs", long_options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "csv:", long_options, NULL)) != -1) {
 		switch (c) {
 		case 'c':
 			if (cmd_type != POOL_INITIALIZE_DO) {
@@ -537,6 +541,14 @@ zpool_do_initialize(int argc, char **argv)
 				usage(B_FALSE);
 			}
 			cmd_type = POOL_INITIALIZE_SUSPEND;
+			break;
+		case 'v':
+			value = strtoull(optarg, NULL, 0);
+			if (value == ULLONG_MAX && errno == ERANGE) {
+				(void) fprintf(stderr,
+				    gettext("invalid value specified\n"));
+				usage(B_FALSE);
+			}
 			break;
 		case '?':
 			if (optopt != 0) {
@@ -579,7 +591,7 @@ zpool_do_initialize(int argc, char **argv)
 		}
 	}
 
-	err = zpool_initialize(zhp, cmd_type, vdevs);
+	err = zpool_initialize(zhp, cmd_type, vdevs, value);
 
 	fnvlist_free(vdevs);
 	zpool_close(zhp);
