@@ -4188,6 +4188,7 @@ main(int argc, char **argv)
 	(void) setrlimit(RLIMIT_NOFILE, &rl);
 	(void) enable_extended_FILE_stdio(-1, -1);
 
+	setlinebuf(stdout);
 	dprintf_setup(&argc, argv);
 
 	/*
