@@ -69,7 +69,7 @@ typedef struct traverse_data {
 
 static int traverse_dnode(traverse_data_t *td, const dnode_phys_t *dnp,
     uint64_t objset, uint64_t object);
-static void prefetch_dnode_metadata(traverse_data_t *td, const dnode_phys_t *,
+static int prefetch_dnode_metadata(traverse_data_t *td, const dnode_phys_t *,
     uint64_t objset, uint64_t object);
 
 static int
@@ -177,28 +177,28 @@ resume_skip_check(traverse_data_t *td, const dnode_phys_t *dnp,
 	return (RESUME_SKIP_NONE);
 }
 
-static void
+static int
 traverse_prefetch_metadata(traverse_data_t *td,
     const blkptr_t *bp, const zbookmark_phys_t *zb)
 {
 	arc_flags_t flags = ARC_FLAG_NOWAIT | ARC_FLAG_PREFETCH;
 
 	if (!(td->td_flags & TRAVERSE_PREFETCH_METADATA))
-		return;
+		return (0);
 	/*
 	 * If we are in the process of resuming, don't prefetch, because
 	 * some children will not be needed (and in fact may have already
 	 * been freed).
 	 */
 	if (td->td_resume != NULL && !ZB_IS_ZERO(td->td_resume))
-		return;
+		return (0);
 	if (BP_IS_HOLE(bp) || bp->blk_birth <= td->td_min_txg)
-		return;
+		return (0);
 	if (BP_GET_LEVEL(bp) == 0 && BP_GET_TYPE(bp) != DMU_OT_DNODE)
-		return;
+		return (0);
 
-	(void) arc_read(NULL, td->td_spa, bp, NULL, NULL,
-	    ZIO_PRIORITY_ASYNC_READ, ZIO_FLAG_CANFAIL, &flags, zb);
+	return (arc_read(NULL, td->td_spa, bp, NULL, NULL,
+	    ZIO_PRIORITY_ASYNC_READ, ZIO_FLAG_CANFAIL, &flags, zb));
 }
 
 static boolean_t
@@ -306,8 +306,10 @@ traverse_visitbp(traverse_data_t *td, const dnode_phys_t *dnp,
 			SET_BOOKMARK(czb, zb->zb_objset, zb->zb_object,
 			    zb->zb_level - 1,
 			    zb->zb_blkid * epb + i);
-			traverse_prefetch_metadata(td,
+			err = traverse_prefetch_metadata(td,
 			    &((blkptr_t *)buf->b_data)[i], czb);
+			if (err != 0)
+				break;
 		}
 
 		/* recursively visitbp() blocks below this */
@@ -336,8 +338,10 @@ traverse_visitbp(traverse_data_t *td, const dnode_phys_t *dnp,
 		child_dnp = buf->b_data;
 
 		for (i = 0; i < epb; i += child_dnp[i].dn_extra_slots + 1) {
-			prefetch_dnode_metadata(td, &child_dnp[i],
+			err = prefetch_dnode_metadata(td, &child_dnp[i],
 			    zb->zb_objset, zb->zb_blkid * epb + i);
+			if (err != 0)
+				break;
 		}
 
 		/* recursively visitbp() blocks below this */
@@ -357,8 +361,11 @@ traverse_visitbp(traverse_data_t *td, const dnode_phys_t *dnp,
 			goto post;
 
 		osp = buf->b_data;
-		prefetch_dnode_metadata(td, &osp->os_meta_dnode, zb->zb_objset,
+		err = prefetch_dnode_metadata(td, &osp->os_meta_dnode, zb->zb_objset,
 		    DMU_META_DNODE_OBJECT);
+		if (err != 0)
+			goto post;
+
 		/*
 		 * See the block comment above for the goal of this variable.
 		 * If the maxblkid of the meta-dnode is 0, then we know that
@@ -369,10 +376,14 @@ traverse_visitbp(traverse_data_t *td, const dnode_phys_t *dnp,
 			td->td_realloc_possible = B_FALSE;
 
 		if (arc_buf_size(buf) >= sizeof (objset_phys_t)) {
-			prefetch_dnode_metadata(td, &osp->os_groupused_dnode,
+			err = prefetch_dnode_metadata(td, &osp->os_groupused_dnode,
 			    zb->zb_objset, DMU_GROUPUSED_OBJECT);
-			prefetch_dnode_metadata(td, &osp->os_userused_dnode,
+			if (err != 0)
+				goto post;
+			err  = prefetch_dnode_metadata(td, &osp->os_userused_dnode,
 			    zb->zb_objset, DMU_USERUSED_OBJECT);
+			if (err != 0)
+				goto post;
 		}
 
 		err = traverse_dnode(td, &osp->os_meta_dnode, zb->zb_objset,
@@ -430,22 +441,24 @@ post:
 	return (err);
 }
 
-static void
+static int
 prefetch_dnode_metadata(traverse_data_t *td, const dnode_phys_t *dnp,
     uint64_t objset, uint64_t object)
 {
 	int j;
 	zbookmark_phys_t czb;
+	int err = 0;
 
 	for (j = 0; j < dnp->dn_nblkptr; j++) {
 		SET_BOOKMARK(&czb, objset, object, dnp->dn_nlevels - 1, j);
-		traverse_prefetch_metadata(td, &dnp->dn_blkptr[j], &czb);
+		err = traverse_prefetch_metadata(td, &dnp->dn_blkptr[j], &czb);
 	}
 
 	if (dnp->dn_flags & DNODE_FLAG_SPILL_BLKPTR) {
 		SET_BOOKMARK(&czb, objset, object, 0, DMU_SPILL_BLKID);
-		traverse_prefetch_metadata(td, DN_SPILL_BLKPTR(dnp), &czb);
+		err = traverse_prefetch_metadata(td, DN_SPILL_BLKPTR(dnp), &czb);
 	}
+	return (err);
 }
 
 static int
