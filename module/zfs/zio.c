@@ -111,6 +111,8 @@ int zio_buf_debug_limit = 16384;
 int zio_buf_debug_limit = 0;
 #endif
 
+int zio_ignore_checksum = 0;	/* nonzero to ignore checksum errors */
+
 static inline void __zio_execute(zio_t *zio);
 
 static void zio_taskq_dispatch(zio_t *, zio_taskq_type_t, boolean_t);
@@ -4773,4 +4775,7 @@ MODULE_PARM_DESC(zfs_sync_pass_rewrite,
 module_param(zio_dva_throttle_enabled, int, 0644);
 MODULE_PARM_DESC(zio_dva_throttle_enabled,
 	"Throttle block allocations in the ZIO pipeline");
+
+module_param(zio_ignore_checksum, int, 0644);
+MODULE_PARM_DESC(zio_ignore_checksum, "Ignore checksum errors");
 #endif

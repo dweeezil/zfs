@@ -526,15 +526,18 @@ zio_checksum_error(zio_t *zio, zio_bad_cksum_t *info)
 	blkptr_t *bp = zio->io_bp;
 	uint_t checksum = (bp == NULL ? zio->io_prop.zp_checksum :
 	    (BP_IS_GANG(bp) ? ZIO_CHECKSUM_GANG_HEADER : BP_GET_CHECKSUM(bp)));
-	int error;
+	int error = 0;
 	uint64_t size = (bp == NULL ? zio->io_size :
 	    (BP_IS_GANG(bp) ? SPA_GANGBLOCKSIZE : BP_GET_PSIZE(bp)));
 	uint64_t offset = zio->io_offset;
 	abd_t *data = zio->io_abd;
 	spa_t *spa = zio->io_spa;
+	extern int zio_ignore_checksum;
 
-	error = zio_checksum_error_impl(spa, bp, checksum, data, size,
-	    offset, info);
+
+	if (zio_ignore_checksum == 0)
+		error = zio_checksum_error_impl(spa, bp, checksum, data, size,
+		    offset, info);
 
 	if (zio_injection_enabled && error == 0 && zio->io_error == 0) {
 		error = zio_handle_fault_injection(zio, ECKSUM);
