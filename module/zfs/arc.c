@@ -5300,6 +5300,7 @@ top:
 	} else {
 		uint64_t lsize = BP_GET_LSIZE(bp);
 		uint64_t psize = BP_GET_PSIZE(bp);
+		enum zio_compress compress = BP_GET_COMPRESS(bp);
 		arc_callback_t *acb;
 		vdev_t *vd = NULL;
 		uint64_t addr = 0;
@@ -5310,8 +5311,19 @@ top:
 		 * Gracefully handle a damaged logical block size as a
 		 * checksum error.
 		 */
-		if (lsize > spa_maxblocksize(spa) || psize > spa_maxblocksize(spa) /* ||
-		    (BP_IS_EMBEDDED(bp) && (lsize == 0 || psize == 0)) */) {
+		if (lsize > spa_maxblocksize(spa) ||
+		    psize > spa_maxblocksize(spa) ||
+		    compress > ZIO_COMPRESS_FUNCTIONS ||
+		    (hdr == NULL && (lsize == 0 ||
+		    (compress == ZIO_COMPRESS_OFF && psize == 0)))) {
+#ifdef _KERNEL
+			printk("arc_read: damaged bp lsize=%llu psize=%llu "
+			    "zb=0x%llx/0x%llx/0x%llx/0x%llx comp=%d emb=%d\n",
+			    (u_longlong_t)lsize, (u_longlong_t)psize,
+			    zb->zb_objset, zb->zb_object, zb->zb_level,
+			    zb->zb_blkid, compress,
+			    BP_IS_EMBEDDED(bp) ? 1 : 0);
+#endif
 			rc = SET_ERROR(ECKSUM);
 			goto out;
 		}
@@ -5320,8 +5332,9 @@ top:
 			/* this block is not in the cache */
 			arc_buf_hdr_t *exists = NULL;
 			arc_buf_contents_t type = BP_GET_BUFC_TYPE(bp);
+
 			hdr = arc_hdr_alloc(spa_load_guid(spa), psize, lsize,
-			    BP_GET_COMPRESS(bp), type);
+			    compress, type);
 
 			if (!BP_IS_EMBEDDED(bp)) {
 				hdr->b_dva = *BP_IDENTITY(bp);

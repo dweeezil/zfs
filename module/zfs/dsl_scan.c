@@ -929,7 +929,7 @@ dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
 
 	if (dsl_scan_recurse(scn, ds, ostype, dnp, bp_toread, zb, tx) != 0) {
 #ifdef _KERNEL
-		printk("dsl_scan_visitbp: scan error visiting ds=%llu zb=%llx/%llx/%llx/%llx\n", ds ? ds->ds_object : 0, zb->zb_objset, zb->zb_object, zb->zb_level, zb->zb_blkid);
+		printk("dsl_scan_visitbp: scan error visiting ds=%llu zb=0x%llx/0x%llx/0x%llx/0x%llx\n", ds ? ds->ds_object : 0, zb->zb_objset, zb->zb_object, zb->zb_level, zb->zb_blkid);
 #endif
 		if (zfs_dsl_scan_visitbp_stop_scrub_on_error)
 			spa_scan_stop(dp->dp_spa);
