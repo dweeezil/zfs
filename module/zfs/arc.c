@@ -5310,8 +5310,8 @@ top:
 		 * Gracefully handle a damaged logical block size as a
 		 * checksum error.
 		 */
-		if (lsize > spa_maxblocksize(spa) || psize > spa_maxblocksize(spa) ||
-		    (BP_IS_EMBEDDED(bp) && (lsize == 0 || psize == 0))) {
+		if (lsize > spa_maxblocksize(spa) || psize > spa_maxblocksize(spa) /* ||
+		    (BP_IS_EMBEDDED(bp) && (lsize == 0 || psize == 0)) */) {
 			rc = SET_ERROR(ECKSUM);
 			goto out;
 		}
