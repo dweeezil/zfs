@@ -3924,6 +3924,7 @@ zdb_read_block(char *thing, spa_t *spa)
 	dva_t *dva = bp->blk_dva;
 	int flags = 0;
 	uint64_t offset = 0, size = 0, psize = 0, lsize = 0, blkptr_offset = 0;
+	uint64_t specified_lsize = 0;
 	zio_t *zio;
 	vdev_t *vd;
 	abd_t *pabd;
@@ -3931,6 +3932,9 @@ zdb_read_block(char *thing, spa_t *spa)
 	char *s, *p, *dup, *vdev, *flagstr;
 	int i, error;
 	boolean_t borrowed = B_FALSE;
+
+	if (getenv("ZDB_LSIZE") != NULL)
+		specified_lsize = strtoull(getenv("ZDB_LSIZE"), NULL, 16);
 
 	dup = strdup(thing);
 	s = strtok(dup, ":");
@@ -4056,8 +4060,12 @@ zdb_read_block(char *thing, spa_t *spa)
 		 * We don't know how the data was compressed, so just try
 		 * every decompress function at every inflated blocksize.
 		 */
-		enum zio_compress c;
+		enum zio_compress c, specified_compression = 0;
 		void *lbuf2 = umem_alloc(SPA_MAXBLOCKSIZE, UMEM_NOFAIL);
+
+		if (getenv("ZDB_COMPRESS") != NULL)
+			specified_compression =
+			    (int) strtoul(getenv("ZDB_COMPRESS"), NULL, 10);
 
 		/*
 		 * XXX - On the one hand, with SPA_MAXBLOCKSIZE at 16MB,
@@ -4065,9 +4073,17 @@ zdb_read_block(char *thing, spa_t *spa)
 		 * we are not stuck.  On the other hand, printing progress
 		 * info gets old after a while.  What to do?
 		 */
-		for (lsize = psize + SPA_MINBLOCKSIZE;
+		if (specified_lsize != 0)
+			lsize = specified_lsize;
+		else
+			lsize = psize + SPA_MINBLOCKSIZE;
+		if (specified_compression != 0)
+			c = specified_compression;
+		else
+			c = 0;
+		for (;
 		    lsize <= SPA_MAXBLOCKSIZE; lsize += SPA_MINBLOCKSIZE) {
-			for (c = 0; c < ZIO_COMPRESS_FUNCTIONS; c++) {
+			for (; c < ZIO_COMPRESS_FUNCTIONS; c++) {
 				/*
 				 * ZLE can easily decompress non zle stream.
 				 * So have an option to disable it.
@@ -4094,8 +4110,11 @@ zdb_read_block(char *thing, spa_t *spa)
 				    lbuf2, psize, lsize) == 0 &&
 				    bcmp(lbuf, lbuf2, lsize) == 0)
 					break;
+				if (specified_lsize != 0)
+					break;
 			}
-			if (c != ZIO_COMPRESS_FUNCTIONS)
+			if (c != ZIO_COMPRESS_FUNCTIONS ||
+			    specified_compression != 0)
 				break;
 		}
 		umem_free(lbuf2, SPA_MAXBLOCKSIZE);
