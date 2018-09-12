@@ -1570,7 +1570,7 @@ zpool_add(zpool_handle_t *zhp, nvlist_t *nvroot)
  */
 static int
 zpool_export_common(zpool_handle_t *zhp, boolean_t force, boolean_t hardforce,
-    const char *log_str)
+    boolean_t spa_abort, const char *log_str)
 {
 	zfs_cmd_t zc = {"\0"};
 	char msg[1024];
@@ -1581,6 +1581,7 @@ zpool_export_common(zpool_handle_t *zhp, boolean_t force, boolean_t hardforce,
 	(void) strlcpy(zc.zc_name, zhp->zpool_name, sizeof (zc.zc_name));
 	zc.zc_cookie = force;
 	zc.zc_guid = hardforce;
+	zc.zc_simple = spa_abort;
 	zc.zc_history = (uint64_t)(uintptr_t)log_str;
 
 	if (zfs_ioctl(zhp->zpool_hdl, ZFS_IOC_POOL_EXPORT, &zc) != 0) {
@@ -1605,14 +1606,21 @@ zpool_export_common(zpool_handle_t *zhp, boolean_t force, boolean_t hardforce,
 int
 zpool_export(zpool_handle_t *zhp, boolean_t force, const char *log_str)
 {
-	return (zpool_export_common(zhp, force, B_FALSE, log_str));
+	return (zpool_export_common(zhp, force, B_FALSE, B_FALSE, log_str));
 }
 
 int
 zpool_export_force(zpool_handle_t *zhp, const char *log_str)
 {
-	return (zpool_export_common(zhp, B_TRUE, B_TRUE, log_str));
+	return (zpool_export_common(zhp, B_TRUE, B_TRUE, B_FALSE, log_str));
 }
+
+int
+zpool_export_abort(zpool_handle_t *zhp, const char *log_str)
+{
+	return (zpool_export_common(zhp, B_TRUE, B_FALSE, B_TRUE, log_str));
+}
+
 
 static void
 zpool_rewind_exclaim(libzfs_handle_t *hdl, const char *name, boolean_t dryrun,

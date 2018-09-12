@@ -1469,6 +1469,7 @@ zpool_do_destroy(int argc, char **argv)
 typedef struct export_cbdata {
 	boolean_t force;
 	boolean_t hardforce;
+	boolean_t spa_abort;
 } export_cbdata_t;
 
 /*
@@ -1500,6 +1501,7 @@ zpool_export_one(zpool_handle_t *zhp, void *data)
  *
  *	-a	Export all pools
  *	-f	Forcefully unmount datasets
+ *	-A	Abandon the pool
  *
  * Export the given pools.  By default, the command will attempt to cleanly
  * unmount any active datasets within the pool.  If the '-f' flag is specified,
@@ -1512,10 +1514,11 @@ zpool_do_export(int argc, char **argv)
 	boolean_t do_all = B_FALSE;
 	boolean_t force = B_FALSE;
 	boolean_t hardforce = B_FALSE;
+	boolean_t spa_abort = B_FALSE;
 	int c, ret;
 
 	/* check options */
-	while ((c = getopt(argc, argv, "afF")) != -1) {
+	while ((c = getopt(argc, argv, "aAfF")) != -1) {
 		switch (c) {
 		case 'a':
 			do_all = B_TRUE;
@@ -1526,6 +1529,9 @@ zpool_do_export(int argc, char **argv)
 		case 'F':
 			hardforce = B_TRUE;
 			break;
+		case 'A':
+			spa_abort = B_TRUE;
+			break;
 		case '?':
 			(void) fprintf(stderr, gettext("invalid option '%c'\n"),
 			    optopt);
@@ -1535,6 +1541,7 @@ zpool_do_export(int argc, char **argv)
 
 	cb.force = force;
 	cb.hardforce = hardforce;
+	cb.spa_abort = spa_abort;
 	argc -= optind;
 	argv += optind;
 

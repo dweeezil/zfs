@@ -386,7 +386,7 @@ do_unmount(const char *mntpt, int flags)
 {
 	char force_opt[] = "-f";
 	char lazy_opt[] = "-l";
-	char *argv[7] = {
+	char *argv[9] = {
 	    "/bin/umount",
 	    "-t", MNTTYPE_ZFS,
 	    NULL, NULL, NULL, NULL };
@@ -1335,7 +1335,7 @@ zpool_disable_datasets(zpool_handle_t *zhp, boolean_t force)
 	libzfs_handle_t *hdl = zhp->zpool_hdl;
 	int i;
 	int ret = -1;
-	int flags = (force ? MS_FORCE : 0);
+	int flags = (force ? MS_FORCE : 0) | MS_DETACH;
 
 	namelen = strlen(zhp->zpool_name);
 

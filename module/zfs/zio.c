@@ -78,6 +78,7 @@ uint64_t zio_buf_cache_frees[SPA_MAXBLOCKSIZE >> SPA_MINBLOCKSHIFT];
 #endif
 
 int zio_delay_max = ZIO_DELAY_MAX;
+int zio_deadman_errno = 0;
 
 #define	BP_SPANB(indblkshift, level) \
 	(((uint64_t)1) << ((level) * ((indblkshift) - SPA_BLKPTRSHIFT)))
@@ -1889,6 +1890,17 @@ zio_deadman_impl(zio_t *pio)
 		    taskq_empty_ent(&pio->io_tqent)) {
 			zio_interrupt(pio);
 		}
+
+#if 0
+		if (spa_get_abort(pio->io_spa))
+			pio->io_error = SET_ERROR(EIO);
+#endif
+#if 1
+		else if (failmode == ZIO_FAILURE_MODE_ABORT && zio_deadman_errno != 0) {
+			pio->io_error = SET_ERROR(zio_deadman_errno);
+			spa_set_abort(pio->io_spa, TRUE);
+		}
+#endif
 	}
 
 	mutex_enter(&pio->io_lock);
@@ -1921,6 +1933,10 @@ zio_deadman(zio_t *pio, char *tag)
 
 	case ZIO_FAILURE_MODE_CONTINUE:
 		zfs_dbgmsg("%s restarting hung I/O for pool '%s'", tag, name);
+		break;
+
+	case ZIO_FAILURE_MODE_ABORT:
+		zfs_dbgmsg("%s aborting hung I/O for pool '%s'", tag, name);
 		break;
 
 	case ZIO_FAILURE_MODE_PANIC:
@@ -2084,11 +2100,16 @@ zio_wait(zio_t *zio)
 			mutex_exit(&zio->io_lock);
 			timeout = MSEC_TO_TICK(zfs_deadman_checktime_ms);
 			zio_deadman(zio, FTAG);
+
+			if (spa_get_deadman_failmode(zio->io_spa) == ZIO_FAILURE_MODE_ABORT &&
+			    spa_get_abort(zio->io_spa))
+				goto out;
 			mutex_enter(&zio->io_lock);
 		}
 	}
 	mutex_exit(&zio->io_lock);
 
+out:
 	error = zio->io_error;
 	zio_destroy(zio);
 
@@ -4836,4 +4857,8 @@ MODULE_PARM_DESC(zfs_sync_pass_rewrite,
 module_param(zio_dva_throttle_enabled, int, 0644);
 MODULE_PARM_DESC(zio_dva_throttle_enabled,
 	"Throttle block allocations in the ZIO pipeline");
+
+module_param(zio_deadman_errno, int, 0644);
+MODULE_PARM_DESC(zio_deadman_errno,
+	"Set error number in zio deadman");
 #endif

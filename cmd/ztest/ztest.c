@@ -6563,7 +6563,7 @@ ztest_spa_import_export(char *oldname, char *newname)
 	/*
 	 * Export it.
 	 */
-	VERIFY3U(0, ==, spa_export(oldname, &config, B_FALSE, B_FALSE));
+	VERIFY3U(0, ==, spa_export(oldname, &config, B_FALSE, B_FALSE, B_FALSE));
 
 	ztest_walk_pool_directory("pools after export");
 

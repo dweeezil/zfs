@@ -1451,7 +1451,7 @@ spa_unload(spa_t *spa)
 	 * This ensures that there is no async metaslab prefetching, by
 	 * calling taskq_wait(mg_taskq).
 	 */
-	if (spa->spa_root_vdev != NULL) {
+	if (spa->spa_root_vdev != NULL && !spa_get_abort(spa)) {
 		spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
 		for (int c = 0; c < spa->spa_root_vdev->vdev_children; c++)
 			vdev_metaslab_fini(spa->spa_root_vdev->vdev_child[c]);
@@ -1464,7 +1464,7 @@ spa_unload(spa_t *spa)
 	/*
 	 * Wait for any outstanding async I/O to complete.
 	 */
-	if (spa->spa_async_zio_root != NULL) {
+	if (spa->spa_async_zio_root != NULL && !spa_get_abort(spa)) {
 		for (int i = 0; i < max_ncpus; i++)
 			(void) zio_wait(spa->spa_async_zio_root[i]);
 		kmem_free(spa->spa_async_zio_root, max_ncpus * sizeof (void *));
@@ -1492,7 +1492,8 @@ spa_unload(spa_t *spa)
 
 	bpobj_close(&spa->spa_deferred_bpobj);
 
-	spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
+	if (!spa_get_abort(spa))
+		spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
 
 	/*
 	 * Close all vdevs.
@@ -5594,7 +5595,7 @@ spa_tryimport(nvlist_t *tryconfig)
  */
 static int
 spa_export_common(char *pool, int new_state, nvlist_t **oldconfig,
-    boolean_t force, boolean_t hardforce)
+    boolean_t force, boolean_t hardforce, boolean_t spa_abort)
 {
 	spa_t *spa;
 
@@ -5609,6 +5610,9 @@ spa_export_common(char *pool, int new_state, nvlist_t **oldconfig,
 		mutex_exit(&spa_namespace_lock);
 		return (SET_ERROR(ENOENT));
 	}
+
+	if (spa_abort)
+		spa_set_abort(spa, B_TRUE);
 
 	/*
 	 * Put a hold on the pool, drop the namespace lock, stop async tasks,
@@ -5633,6 +5637,10 @@ spa_export_common(char *pool, int new_state, nvlist_t **oldconfig,
 	 */
 	if (spa->spa_sync_on) {
 		txg_wait_synced(spa->spa_dsl_pool, 0);
+		if (spa_get_abort(spa)) {
+			spa_unload(spa);
+			goto export_spa;
+		}
 		spa_evicting_os_wait(spa);
 	}
 
@@ -5709,7 +5717,7 @@ int
 spa_destroy(char *pool)
 {
 	return (spa_export_common(pool, POOL_STATE_DESTROYED, NULL,
-	    B_FALSE, B_FALSE));
+	    B_FALSE, B_FALSE, B_FALSE));
 }
 
 /*
@@ -5717,10 +5725,10 @@ spa_destroy(char *pool)
  */
 int
 spa_export(char *pool, nvlist_t **oldconfig, boolean_t force,
-    boolean_t hardforce)
+    boolean_t hardforce, boolean_t spa_abort)
 {
 	return (spa_export_common(pool, POOL_STATE_EXPORTED, oldconfig,
-	    force, hardforce));
+	    force, hardforce, spa_abort));
 }
 
 /*
@@ -5731,7 +5739,7 @@ int
 spa_reset(char *pool)
 {
 	return (spa_export_common(pool, POOL_STATE_UNINITIALIZED, NULL,
-	    B_FALSE, B_FALSE));
+	    B_FALSE, B_FALSE, B_FALSE));
 }
 
 /*
@@ -6640,7 +6648,7 @@ spa_vdev_split_mirror(spa_t *spa, char *newname, nvlist_t *config,
 	/* if we're not going to mount the filesystems in userland, export */
 	if (exp)
 		error = spa_export_common(newname, POOL_STATE_EXPORTED, NULL,
-		    B_FALSE, B_FALSE);
+		    B_FALSE, B_FALSE, B_FALSE);
 
 	return (error);
 

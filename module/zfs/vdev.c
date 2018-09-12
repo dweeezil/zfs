@@ -1415,7 +1415,7 @@ vdev_probe(vdev_t *vd, zio_t *zio)
 	/*
 	 * Don't probe the probe.
 	 */
-	if (zio && (zio->io_flags & ZIO_FLAG_PROBE))
+	if (spa_get_abort(spa) || (zio && (zio->io_flags & ZIO_FLAG_PROBE)))
 		return (NULL);
 
 	/*

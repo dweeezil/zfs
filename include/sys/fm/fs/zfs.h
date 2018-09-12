@@ -108,6 +108,7 @@ extern "C" {
 #define	FM_EREPORT_FAILMODE_WAIT		"wait"
 #define	FM_EREPORT_FAILMODE_CONTINUE		"continue"
 #define	FM_EREPORT_FAILMODE_PANIC		"panic"
+#define	FM_EREPORT_FAILMODE_ABORT		"abort"
 
 #define	FM_RESOURCE_REMOVED			"removed"
 #define	FM_RESOURCE_AUTOREPLACE			"autoreplace"
