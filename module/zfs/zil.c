@@ -108,6 +108,15 @@ zil_stats_t zil_stats = {
 	{ "zil_itx_metaslab_normal_bytes",	KSTAT_DATA_UINT64 },
 	{ "zil_itx_metaslab_slog_count",	KSTAT_DATA_UINT64 },
 	{ "zil_itx_metaslab_slog_bytes",	KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_notdone_calls",	KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_done_calls",	KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_notdone_ns",	KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_done_ns",		KSTAT_DATA_UINT64 },
+	{ "zil_lwb_root_zio_ns",		KSTAT_DATA_UINT64 },
+	{ "zil_lwb_write_zio_ns",		KSTAT_DATA_UINT64 },
+	{ "zil_lwb_latency_ns",			KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_iter",		KSTAT_DATA_UINT64 },
+	{ "zil_commit_waiter_timeouts",		KSTAT_DATA_UINT64 },
 };
 
 static kstat_t *zil_ksp;
@@ -1100,6 +1109,8 @@ zil_lwb_flush_vdevs_done(zio_t *zio)
 
 	ASSERT3U(lwb->lwb_issued_timestamp, >, 0);
 	zilog->zl_last_lwb_latency = gethrtime() - lwb->lwb_issued_timestamp;
+	ZIL_STAT_INCR(zil_lwb_latency_ns, zilog->zl_last_lwb_latency);
+	ZIL_STAT_INCR(zil_lwb_root_zio_ns, gethrtime() - zio->io_queued_timestamp);
 
 	lwb->lwb_root_zio = NULL;
 	lwb->lwb_state = LWB_STATE_DONE;
@@ -1181,6 +1192,7 @@ zil_lwb_write_done(zio_t *zio)
 
 	ASSERT3S(lwb->lwb_state, ==, LWB_STATE_ISSUED);
 
+	ZIL_STAT_INCR(zil_lwb_write_zio_ns, gethrtime() - zio->io_queued_timestamp);
 	mutex_enter(&zilog->zl_lock);
 	lwb->lwb_write_zio = NULL;
 	lwb->lwb_fastwrite = FALSE;
@@ -2482,14 +2494,18 @@ zil_commit_waiter(zilog_t *zilog, zil_commit_waiter_t *zcw)
 	 * For more details, see the comment at the bottom of the
 	 * zil_process_commit_list() function.
 	 */
+#if 0
 	int pct = MAX(zfs_commit_timeout_pct, 1);
 	hrtime_t sleep = (zilog->zl_last_lwb_latency * pct) / 100;
 	hrtime_t wakeup = gethrtime() + sleep;
 	boolean_t timedout = B_FALSE;
+#endif
 
 	while (!zcw->zcw_done) {
+		ZIL_STAT_BUMP(zil_commit_waiter_iter);
 		ASSERT(MUTEX_HELD(&zcw->zcw_lock));
 
+#if 0
 		lwb_t *lwb = zcw->zcw_lwb;
 
 		/*
@@ -2522,16 +2538,22 @@ zil_commit_waiter(zilog_t *zilog, zil_commit_waiter_t *zcw)
 			 * timeout is reached; responsibility (2) from
 			 * the comment above this function.
 			 */
+			hrtime_t ht1 = gethrtime();
 			clock_t timeleft = cv_timedwait_hires(&zcw->zcw_cv,
 			    &zcw->zcw_lock, wakeup, USEC2NSEC(1),
 			    CALLOUT_FLAG_ABSOLUTE);
+			ZIL_STAT_INCR(zil_commit_waiter_notdone_ns, gethrtime() - ht1);
+			ZIL_STAT_BUMP(zil_commit_waiter_notdone_calls);
 
 			if (timeleft >= 0 || zcw->zcw_done)
 				continue;
 
+			ZIL_STAT_BUMP(zil_commit_waiter_timeouts);
 			timedout = B_TRUE;
+#endif
 			zil_commit_waiter_timeout(zilog, zcw);
 
+#if 0
 			if (!zcw->zcw_done) {
 				/*
 				 * If the commit waiter has already been
@@ -2545,6 +2567,7 @@ zil_commit_waiter(zilog_t *zilog, zil_commit_waiter_t *zcw)
 				ASSERT3S(lwb->lwb_state, !=, LWB_STATE_OPENED);
 			}
 		} else {
+#endif
 			/*
 			 * If the lwb isn't open, then it must have already
 			 * been issued. In that case, there's no need to
@@ -2560,8 +2583,13 @@ zil_commit_waiter(zilog_t *zilog, zil_commit_waiter_t *zcw)
 			IMPLY(lwb != NULL,
 			    lwb->lwb_state == LWB_STATE_ISSUED ||
 			    lwb->lwb_state == LWB_STATE_DONE);
+			hrtime_t ht1 = gethrtime();
 			cv_wait(&zcw->zcw_cv, &zcw->zcw_lock);
+			ZIL_STAT_INCR(zil_commit_waiter_done_ns, gethrtime() - ht1);
+			ZIL_STAT_BUMP(zil_commit_waiter_done_calls);
+#if 0
 		}
+#endif
 	}
 
 	mutex_exit(&zcw->zcw_lock);

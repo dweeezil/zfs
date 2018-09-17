@@ -453,6 +453,16 @@ typedef struct zil_stats {
 	 */
 	kstat_named_t zil_itx_metaslab_slog_count;
 	kstat_named_t zil_itx_metaslab_slog_bytes;
+
+	kstat_named_t zil_commit_waiter_notdone_calls;
+	kstat_named_t zil_commit_waiter_done_calls;
+	kstat_named_t zil_commit_waiter_notdone_ns;
+	kstat_named_t zil_commit_waiter_done_ns;
+	kstat_named_t zil_lwb_root_zio_ns;
+	kstat_named_t zil_lwb_write_zio_ns;
+	kstat_named_t zil_lwb_latency_ns;
+	kstat_named_t zil_commit_waiter_iter;
+	kstat_named_t zil_commit_waiter_timeouts;
 } zil_stats_t;
 
 extern zil_stats_t zil_stats;
