@@ -1,0 +1,110 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "origin"]
+	url = https://github.com/zfsonlinux/zfs
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+[remote "dweeezil"]
+	url = ssh://git@github.com/dweeezil/zfs
+	fetch = +refs/heads/*:refs/remotes/dweeezil/*
+[branch "ntrim2-next"]
+	remote = dweeezil
+	merge = refs/heads/ntrim2-next
+[remote "ubuntu"]
+	url = ssh://ubuntu/home/dweeezil/src/zfs
+	fetch = +refs/heads/*:refs/remotes/ubuntu/*
+[remote "aerusso"]
+	url = https://github.com/aerusso/zfs
+	fetch = +refs/heads/*:refs/remotes/aerusso/*
+[remote "ahrens"]
+	url = https://github.com/ahrens/zfs
+	fetch = +refs/heads/*:refs/remotes/ahrens/*
+[remote "behlendorf"]
+	url = https://github.com/behlendorf/zfs
+	fetch = +refs/heads/*:refs/remotes/behlendorf/*
+[remote "chrisrd"]
+	url = https://github.com/chrisrd/zfs
+	fetch = +refs/heads/*:refs/remotes/chrisrd/*
+[remote "datto"]
+	url = https://github.com/datto/zfs
+	fetch = +refs/heads/*:refs/remotes/datto/*
+[remote "dbavatar"]
+	url = https://github.com/dbavatar/zfs
+	fetch = +refs/heads/*:refs/remotes/dbavatar/*
+[remote "dechamps"]
+	url = https://github.com/dechamps/zfs
+	fetch = +refs/heads/*:refs/remotes/dechamps/*
+[remote "dehacked"]
+	url = https://github.com/DeHackEd/zfs
+	fetch = +refs/heads/*:refs/remotes/dehacked/*
+[remote "DeHackEd"]
+	url = https://github.com/DeHackEd/zfs
+	fetch = +refs/heads/*:refs/remotes/DeHackEd/*
+[remote "don-brady"]
+	url = https://github.com/don-brady/zfs
+	fetch = +refs/heads/*:refs/remotes/don-brady/*
+[remote "FransUrbo"]
+	url = https://github.com/FransUrbo/zfs
+	fetch = +refs/heads/*:refs/remotes/FransUrbo/*
+[remote "gmelikov"]
+	url = https://github.com/gmelikov/zfs
+	fetch = +refs/heads/*:refs/remotes/gmelikov/*
+[remote "hsepeng"]
+	url = https://github.com/hsepeng/zfs
+	fetch = +refs/heads/*:refs/remotes/hsepeng/*
+[remote "kernelOfTruth"]
+	url = https://github.com/kernelOfTruth/zfs
+	fetch = +refs/heads/*:refs/remotes/kernelOfTruth/*
+[remote "lorddoskias"]
+	url = https://github.com/lorddoskias/zfs
+	fetch = +refs/heads/*:refs/remotes/lorddoskias/*
+[remote "mk01"]
+	url = https://github.com/mk01/zfs
+	fetch = +refs/heads/*:refs/remotes/mk01/*
+[remote "nedbass"]
+	url = https://github.com/nedbass/zfs
+	fetch = +refs/heads/*:refs/remotes/nedbass/*
+[remote "ofaaland"]
+	url = https://github.com/ofaaland/zfs
+	fetch = +refs/heads/*:refs/remotes/ofaaland/*
+[remote "pcd"]
+	url = https://github.com/pcd1193182/zfs
+	fetch = +refs/heads/*:refs/remotes/pcd/*
+[remote "prakashsurya"]
+	url = https://github.com/prakashsurya/zfs.git
+	fetch = +refs/heads/*:refs/remotes/prakashsurya/*
+[remote "prometheanfire"]
+	url = https://github.com/prometheanfire/zfs
+	fetch = +refs/heads/*:refs/remotes/prometheanfire/*
+[remote "ptx0"]
+	url = https://github.com/ptx0/zfs
+	fetch = +refs/heads/*:refs/remotes/ptx0/*
+[remote "Rudd-O"]
+	url = https://github.com/Rudd-O/zfs
+	fetch = +refs/heads/*:refs/remotes/Rudd-O/*
+[remote "ryao"]
+	url = https://github.com/ryao/zfs
+	fetch = +refs/heads/*:refs/remotes/ryao/*
+[remote "sempervictus"]
+	url = https://github.com/sempervictus/zfs
+	fetch = +refs/heads/*:refs/remotes/sempervictus/*
+[remote "tcaputi"]
+	url = https://github.com/tcaputi/zfs
+	fetch = +refs/heads/*:refs/remotes/tcaputi/*
+[remote "tonyhutter"]
+	url = https://github.com/tonyhutter/zfs
+	fetch = +refs/heads/*:refs/remotes/tonyhutter/*
+[remote "tuxoko"]
+	url = https://github.com/tuxoko/zfs
+	fetch = +refs/heads/*:refs/remotes/tuxoko/*
+[remote "zzz"]
+	url = https://github.com/liaoyuxiangqin/zfs
+	fetch = +refs/heads/*:refs/remotes/zzz/*
+[branch "openzfs-9102"]
+	remote = dweeezil
+	merge = refs/heads/openzfs-9102
