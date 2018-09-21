@@ -1879,7 +1879,7 @@ zio_deadman_impl(zio_t *pio)
 		    delta, pio->io_delta, pio->io_delay,
 		    vd->vdev_path, vq->vq_io_complete_ts,
 		    pio->io_type, pio->io_priority, pio->io_flags,
-		    pio->io_state, pio->io_pipeline, pio->io_pipeline_trace,
+		    pio->io_stage, pio->io_pipeline, pio->io_pipeline_trace,
 		    zb->zb_objset, zb->zb_object, zb->zb_level, zb->zb_blkid,
 		    pio->io_offset, pio->io_size, pio->io_error);
 		zfs_ereport_post(FM_EREPORT_ZFS_DEADMAN,

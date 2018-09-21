@@ -407,7 +407,7 @@ vdev_disk_dio_put(dio_request_t *dr)
 
 	/*
 	 * Free the dio_request when the last reference is dropped and
-	 * ensure zio_interpret is called only once with the correct zio
+	 * ensure zio_interrupt is called only once with the correct zio
 	 */
 	if (rc == 0) {
 		zio_t *zio = dr->dr_zio;
