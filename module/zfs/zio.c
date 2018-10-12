@@ -804,6 +804,9 @@ zio_create(zio_t *pio, spa_t *spa, uint64_t txg, const blkptr_t *bp,
 			pipeline |= ZIO_GANG_STAGES;
 	}
 
+	if (zio->io_spa != NULL && spa_get_abandon(zio->io_spa))
+		pipeline = ZIO_INTERLOCK_PIPELINE;
+
 	zio->io_spa = spa;
 	zio->io_txg = txg;
 	zio->io_done = done;
@@ -1890,20 +1893,6 @@ zio_deadman_impl(zio_t *pio)
 		    taskq_empty_ent(&pio->io_tqent)) {
 			zio_interrupt(pio);
 		}
-
-#if 1
-		if (spa_get_abandon(pio->io_spa)) {
-			pio->io_error = SET_ERROR(EIO);
-			pio->io_pipeline = ZIO_INTERLOCK_PIPELINE;
-			zio_interrupt(pio);
-		}
-#endif
-#if 0
-		else if (failmode == ZIO_FAILURE_MODE_ABORT && zio_deadman_errno != 0) {
-			pio->io_error = SET_ERROR(zio_deadman_errno);
-			spa_set_abandon(pio->io_spa, TRUE);
-		}
-#endif
 	}
 
 	mutex_enter(&pio->io_lock);
@@ -2100,19 +2089,17 @@ zio_wait(zio_t *zio)
 			timeout = MSEC_TO_TICK(zfs_deadman_checktime_ms);
 			zio_deadman(zio, FTAG);
 
-#if 0
-			if (spa_get_deadman_failmode(zio->io_spa) == ZIO_FAILURE_MODE_ABORT &&
-			    spa_get_abandon(zio->io_spa))
+			if (spa_get_abandon(zio->io_spa)) {
+				/* pio->io_error = SET_ERROR(EIO); */
+				zio->io_pipeline = ZIO_INTERLOCK_PIPELINE;
+				zio_interrupt(zio);
 				goto out;
-#endif
+			}
 			mutex_enter(&zio->io_lock);
 		}
 	}
 	mutex_exit(&zio->io_lock);
-
-#if 0
 out:
-#endif
 	error = zio->io_error;
 	zio_destroy(zio);
 

@@ -1451,7 +1451,7 @@ spa_unload(spa_t *spa)
 	 * This ensures that there is no async metaslab prefetching, by
 	 * calling taskq_wait(mg_taskq).
 	 */
-	if (spa->spa_root_vdev != NULL && !spa_get_abandon(spa)) {
+	if (spa->spa_root_vdev != NULL /* && !spa_get_abandon(spa) */) {
 		spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
 		for (int c = 0; c < spa->spa_root_vdev->vdev_children; c++)
 			vdev_metaslab_fini(spa->spa_root_vdev->vdev_child[c]);
@@ -1464,7 +1464,7 @@ spa_unload(spa_t *spa)
 	/*
 	 * Wait for any outstanding async I/O to complete.
 	 */
-	if (spa->spa_async_zio_root != NULL && !spa_get_abandon(spa)) {
+	if (spa->spa_async_zio_root != NULL /* && !spa_get_abandon(spa) */) {
 		for (int i = 0; i < max_ncpus; i++)
 			(void) zio_wait(spa->spa_async_zio_root[i]);
 		kmem_free(spa->spa_async_zio_root, max_ncpus * sizeof (void *));
@@ -1492,7 +1492,9 @@ spa_unload(spa_t *spa)
 
 	bpobj_close(&spa->spa_deferred_bpobj);
 
+#if 0
 	if (!spa_get_abandon(spa))
+#endif
 		spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
 
 	/*
@@ -5637,10 +5639,12 @@ spa_export_common(char *pool, int new_state, nvlist_t **oldconfig,
 	 */
 	if (spa->spa_sync_on) {
 		txg_wait_synced(spa->spa_dsl_pool, 0);
+#if 0
 		if (spa_get_abandon(spa)) {
 			spa_unload(spa);
 			goto export_spa;
 		}
+#endif
 		spa_evicting_os_wait(spa);
 	}
 
