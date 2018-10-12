@@ -753,7 +753,7 @@ extern int spa_destroy(char *pool);
 extern int spa_checkpoint(const char *pool);
 extern int spa_checkpoint_discard(const char *pool);
 extern int spa_export(char *pool, nvlist_t **oldconfig, boolean_t force,
-    boolean_t hardforce, boolean_t spa_abort);
+    boolean_t hardforce, boolean_t spa_abandon);
 extern int spa_reset(char *pool);
 extern void spa_async_request(spa_t *spa, int flag);
 extern void spa_async_unrequest(spa_t *spa, int flag);
@@ -998,8 +998,8 @@ extern uint64_t spa_deadman_synctime(spa_t *spa);
 extern uint64_t spa_deadman_ziotime(spa_t *spa);
 extern uint64_t spa_dirty_data(spa_t *spa);
 
-extern void spa_set_abort(spa_t *, boolean_t);
-extern boolean_t spa_get_abort(spa_t *);
+extern void spa_set_abandon(spa_t *, boolean_t);
+extern boolean_t spa_get_abandon(spa_t *);
 
 /* Miscellaneous support routines */
 extern void spa_load_failed(spa_t *spa, const char *fmt, ...);

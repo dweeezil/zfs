@@ -1688,10 +1688,10 @@ zfs_ioc_pool_export(zfs_cmd_t *zc)
 	int error;
 	boolean_t force = (boolean_t)zc->zc_cookie;
 	boolean_t hardforce = (boolean_t)zc->zc_guid;
-	boolean_t spa_abort = (boolean_t)zc->zc_simple;
+	boolean_t spa_abandon = (boolean_t)zc->zc_simple;
 
 	zfs_log_history(zc);
-	error = spa_export(zc->zc_name, NULL, force, hardforce, spa_abort);
+	error = spa_export(zc->zc_name, NULL, force, hardforce, spa_abandon);
 
 	return (error);
 }
@@ -1818,6 +1818,21 @@ zfs_ioc_pool_freeze(zfs_cmd_t *zc)
 	}
 	return (error);
 }
+
+static int
+zfs_ioc_pool_abandon(zfs_cmd_t *zc)
+{
+	spa_t *spa;
+	int error;
+
+	error = spa_open(zc->zc_name, &spa, FTAG);
+	if (error == 0) {
+		spa_set_abandon(spa, B_TRUE);
+		spa_close(spa, FTAG);
+	}
+	return (error);
+}
+
 
 static int
 zfs_ioc_pool_upgrade(zfs_cmd_t *zc)
@@ -6636,6 +6651,9 @@ zfs_ioctl_init(void)
 	    ARRAY_SIZE(zfs_keys_pool_discard_checkpoint));
 
 	/* IOCTLS that use the legacy function signature */
+
+	zfs_ioctl_register_legacy(ZFS_IOC_POOL_ABANDON, zfs_ioc_pool_abandon,
+	    zfs_secpolicy_config, NO_NAME, B_FALSE, POOL_CHECK_READONLY);
 
 	zfs_ioctl_register_legacy(ZFS_IOC_POOL_FREEZE, zfs_ioc_pool_freeze,
 	    zfs_secpolicy_config, NO_NAME, B_FALSE, POOL_CHECK_READONLY);

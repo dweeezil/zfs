@@ -491,7 +491,7 @@ spa_config_enter(spa_t *spa, int locks, void *tag, krw_t rw)
 
 	ASSERT3U(SCL_LOCKS, <, sizeof (wlocks_held) * NBBY);
 
-	if (spa->spa_abort)
+	if (spa->spa_abandon)
 		return;
 	for (int i = 0; i < SCL_LOCKS; i++) {
 		spa_config_lock_t *scl = &spa->spa_config_lock[i];
@@ -1932,7 +1932,7 @@ spa_evicting_os_deregister(spa_t *spa, objset_t *os)
 void
 spa_evicting_os_wait(spa_t *spa)
 {
-	if (spa->spa_abort)
+	if (spa->spa_abandon)
 		return;
 	mutex_enter(&spa->spa_evicting_os_lock);
 	while (!list_is_empty(&spa->spa_evicting_os_list))
@@ -1988,25 +1988,23 @@ spa_set_deadman_failmode(spa_t *spa, const char *failmode)
 		spa->spa_deadman_failmode = ZIO_FAILURE_MODE_CONTINUE;
 	else if (strcmp(failmode, "panic") == 0)
 		spa->spa_deadman_failmode = ZIO_FAILURE_MODE_PANIC;
-	else if (strcmp(failmode, "abort") == 0)
-		spa->spa_deadman_failmode = ZIO_FAILURE_MODE_ABORT;
 	else
 		spa->spa_deadman_failmode = ZIO_FAILURE_MODE_WAIT;
 }
 
 void
-spa_set_abort(spa_t *spa, boolean_t flag)
+spa_set_abandon(spa_t *spa, boolean_t flag)
 {
-	spa->spa_abort = flag;
+	spa->spa_abandon = flag;
 #ifdef _KERNEL
-	printk("%s: spa_abort=%d\n", __FUNCTION__, flag);
+	printk("%s: spa_abandon=%d\n", __FUNCTION__, flag);
 #endif
 }
 
 boolean_t
-spa_get_abort(spa_t *spa)
+spa_get_abandon(spa_t *spa)
 {
-	return (spa->spa_abort);
+	return (spa->spa_abandon);
 }
 
 uint64_t

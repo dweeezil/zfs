@@ -166,7 +166,6 @@ enum zio_encrypt {
 #define	ZIO_FAILURE_MODE_WAIT		0
 #define	ZIO_FAILURE_MODE_CONTINUE	1
 #define	ZIO_FAILURE_MODE_PANIC		2
-#define	ZIO_FAILURE_MODE_ABORT		3
 
 typedef enum zio_suspend_reason {
 	ZIO_SUSPEND_NONE = 0,

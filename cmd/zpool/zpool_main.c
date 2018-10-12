@@ -110,6 +110,7 @@ static int zpool_do_get(int, char **);
 static int zpool_do_set(int, char **);
 
 static int zpool_do_sync(int, char **);
+static int zpool_do_abandon(int, char **);
 
 /*
  * These libumem hooks provide a reasonable set of defaults for the allocator's
@@ -157,7 +158,8 @@ typedef enum {
 	HELP_SPLIT,
 	HELP_SYNC,
 	HELP_REGUID,
-	HELP_REOPEN
+	HELP_REOPEN,
+	HELP_ABANDON
 } zpool_help_t;
 
 
@@ -288,6 +290,7 @@ static zpool_command_t command_table[] = {
 	{ "get",	zpool_do_get,		HELP_GET		},
 	{ "set",	zpool_do_set,		HELP_SET		},
 	{ "sync",	zpool_do_sync,		HELP_SYNC		},
+	{ "abandon",	zpool_do_abandon,	HELP_ABANDON		},
 };
 
 #define	NCOMMAND	(ARRAY_SIZE(command_table))
@@ -381,6 +384,8 @@ get_usage(zpool_help_t idx)
 		return (gettext("\treguid <pool>\n"));
 	case HELP_SYNC:
 		return (gettext("\tsync [pool] ...\n"));
+	case HELP_ABANDON:
+		return (gettext("\tabandon [pool] ...\n"));
 	}
 
 	abort();
@@ -1469,7 +1474,7 @@ zpool_do_destroy(int argc, char **argv)
 typedef struct export_cbdata {
 	boolean_t force;
 	boolean_t hardforce;
-	boolean_t spa_abort;
+	boolean_t abandon;
 } export_cbdata_t;
 
 /*
@@ -1486,7 +1491,10 @@ zpool_export_one(zpool_handle_t *zhp, void *data)
 	/* The history must be logged as part of the export */
 	log_history = B_FALSE;
 
-	if (cb->hardforce) {
+	if (cb->abandon) {
+		if (zpool_export_abandon(zhp, history_str) != 0)
+			return (1);
+	} else if (cb->hardforce) {
 		if (zpool_export_force(zhp, history_str) != 0)
 			return (1);
 	} else if (zpool_export(zhp, cb->force, history_str) != 0) {
@@ -1514,7 +1522,7 @@ zpool_do_export(int argc, char **argv)
 	boolean_t do_all = B_FALSE;
 	boolean_t force = B_FALSE;
 	boolean_t hardforce = B_FALSE;
-	boolean_t spa_abort = B_FALSE;
+	boolean_t abandon = B_FALSE;
 	int c, ret;
 
 	/* check options */
@@ -1530,7 +1538,8 @@ zpool_do_export(int argc, char **argv)
 			hardforce = B_TRUE;
 			break;
 		case 'A':
-			spa_abort = B_TRUE;
+			abandon = B_TRUE;
+			hardforce = B_TRUE;
 			break;
 		case '?':
 			(void) fprintf(stderr, gettext("invalid option '%c'\n"),
@@ -1541,7 +1550,7 @@ zpool_do_export(int argc, char **argv)
 
 	cb.force = force;
 	cb.hardforce = hardforce;
-	cb.spa_abort = spa_abort;
+	cb.abandon = abandon;
 	argc -= optind;
 	argv += optind;
 
@@ -3093,6 +3102,31 @@ zpool_do_sync(int argc, char **argv)
 	/* if argc == 0 we will execute zpool_sync_one on all pools */
 	ret = for_each_pool(argc, argv, B_FALSE, NULL, zpool_sync_one, &force);
 
+	return (ret);
+}
+
+/*
+ * zpool abandon [pool]
+ *
+ * Abandon the specified pool.
+ */
+static int
+zpool_do_abandon(int argc, char **argv)
+{
+	int ret;
+	zfs_cmd_t zc;
+
+	if (argc != 2) {
+		(void) fprintf(stderr, gettext("missing pool name\n"));
+		usage(B_FALSE);
+	}
+	(void) strlcpy(zc.zc_name, argv[1], sizeof (zc.zc_name));
+	ret = zfs_ioctl(g_zfs, ZFS_IOC_POOL_ABANDON, &zc);
+	if (ret != 0) {
+		(void) fprintf(stderr,
+		gettext("failed to abandon pool: %d\n"), errno);
+		ret = 1;
+	}
 	return (ret);
 }
 

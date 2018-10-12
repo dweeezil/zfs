@@ -384,7 +384,7 @@ struct spa {
 	taskq_t		*spa_prefetch_taskq;	/* Taskq for prefetch threads */
 	uint64_t	spa_multihost;		/* multihost aware (mmp) */
 	mmp_thread_t	spa_mmp;		/* multihost mmp thread */
-	boolean_t	spa_abort;
+	boolean_t	spa_abandon;
 
 	/*
 	 * spa_refcount & spa_config_lock must be the last elements
