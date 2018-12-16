@@ -5140,6 +5140,7 @@ arc_adjust_cb(void *arg, zthr_t *zthr)
 		 * arc_get_data_impl() sooner.
 		 */
 		cv_broadcast(&arc_adjust_waiters_cv);
+		arc_need_free = 0;
 	}
 	mutex_exit(&arc_adjust_lock);
 	spl_fstrans_unmark(cookie);
@@ -5222,7 +5223,7 @@ arc_reap_cb(void *arg, zthr_t *zthr)
 	    (arc_c >> arc_shrink_shift) - free_memory;
 	if (to_free > 0) {
 #ifdef _KERNEL
-		to_free = MAX(to_free, ptob(arc_need_free));
+		to_free = MAX(to_free, arc_need_free);
 #endif
 		arc_reduce_target_size(to_free);
 	}
