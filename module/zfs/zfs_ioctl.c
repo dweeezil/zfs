@@ -204,6 +204,7 @@
 #include <sys/zfs_sysfs.h>
 #include <sys/vdev_impl.h>
 #include <sys/vdev_initialize.h>
+#include <sys/vdev_trim.h>
 
 #include <linux/miscdevice.h>
 #include <linux/slab.h>
@@ -1752,36 +1753,6 @@ zfs_ioc_pool_scan(zfs_cmd_t *zc)
 		error = spa_scan_stop(spa);
 	else
 		error = spa_scan(spa, zc->zc_cookie);
-
-	spa_close(spa, FTAG);
-
-	return (error);
-}
-
-/*
- * inputs:
- * zc_name              name of the pool
- * zc_cookie            trim_cmd_info_t
- */
-static int
-zfs_ioc_pool_trim(zfs_cmd_t *zc)
-{
-	spa_t *spa;
-	int error;
-	trim_cmd_info_t	tci;
-
-	if (ddi_copyin((void *)(uintptr_t)zc->zc_cookie, &tci,
-	    sizeof (tci), 0) == -1)
-		return (EFAULT);
-
-	if ((error = spa_open(zc->zc_name, &spa, FTAG)) != 0)
-		return (error);
-
-	if (tci.tci_start) {
-		spa_man_trim(spa, tci.tci_rate, tci.tci_fulltrim);
-	} else {
-		spa_man_trim_stop(spa);
-	}
 
 	spa_close(spa, FTAG);
 
@@ -3942,6 +3913,89 @@ zfs_ioc_pool_initialize(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
 		fnvlist_add_nvlist(outnvl, ZPOOL_INITIALIZE_VDEVS,
 		    vdev_errlist);
 	}
+	fnvlist_free(vdev_errlist);
+
+	spa_close(spa, FTAG);
+	return (total_errors > 0 ? EINVAL : 0);
+}
+
+/*
+ * innvl: {
+ *     "trim_command" -> POOL_TRIM_{CANCEL|DO|SUSPEND} (uint64)
+ *     "trim_vdevs": { -> guids to TRIM (nvlist)
+ *         "vdev_path_1": vdev_guid_1, (uint64),
+ *         "vdev_path_2": vdev_guid_2, (uint64),
+ *         ...
+ *     },
+ *     "trim_rate" -> Target TRIM rate in bytes/sec.
+ *     "trim_full" -> Set to TRIM space never allocated.
+ * }
+ *
+ * outnvl: {
+ *     "trim_vdevs": { -> TRIM errors (nvlist)
+ *         "vdev_path_1": errno, see function body for possible errnos (uint64)
+ *         "vdev_path_2": errno, ... (uint64)
+ *         ...
+ *     }
+ * }
+ *
+ * EINVAL is returned for an unknown commands or if any of the provided vdev
+ * guids have be specified with a type other than uint64.
+ */
+static const zfs_ioc_key_t zfs_keys_pool_trim[] = {
+	{ZPOOL_TRIM_COMMAND,	DATA_TYPE_UINT64,		0},
+	{ZPOOL_TRIM_VDEVS,	DATA_TYPE_NVLIST,		0},
+	{ZPOOL_TRIM_RATE,	DATA_TYPE_UINT64,		ZK_OPTIONAL},
+	{ZPOOL_TRIM_FULL,	DATA_TYPE_BOOLEAN_VALUE,	ZK_OPTIONAL},
+};
+
+static int
+zfs_ioc_pool_trim(const char *poolname, nvlist_t *innvl, nvlist_t *outnvl)
+{
+	uint64_t cmd_type;
+	if (nvlist_lookup_uint64(innvl, ZPOOL_TRIM_COMMAND, &cmd_type) != 0)
+		return (SET_ERROR(EINVAL));
+
+	if (!(cmd_type == POOL_TRIM_CANCEL ||
+	    cmd_type == POOL_TRIM_DO ||
+	    cmd_type == POOL_TRIM_SUSPEND)) {
+		return (SET_ERROR(EINVAL));
+	}
+
+	nvlist_t *vdev_guids;
+	if (nvlist_lookup_nvlist(innvl, ZPOOL_TRIM_VDEVS, &vdev_guids) != 0)
+		return (SET_ERROR(EINVAL));
+
+	for (nvpair_t *pair = nvlist_next_nvpair(vdev_guids, NULL);
+	    pair != NULL; pair = nvlist_next_nvpair(vdev_guids, pair)) {
+		uint64_t vdev_guid;
+		if (nvpair_value_uint64(pair, &vdev_guid) != 0) {
+			return (SET_ERROR(EINVAL));
+		}
+	}
+
+	/* Optional, defaults to maximum rate when not provided */
+	uint64_t rate;
+	if (nvlist_lookup_uint64(innvl, ZPOOL_TRIM_RATE, &rate) != 0)
+		rate = 0;
+
+	/* Optional, defaults to full TRIM when not provided */
+	boolean_t fulltrim;
+	if (nvlist_lookup_boolean_value(innvl, ZPOOL_TRIM_FULL, &fulltrim) != 0)
+		fulltrim = B_TRUE;
+
+	spa_t *spa;
+	int error = spa_open(poolname, &spa, FTAG);
+	if (error != 0)
+		return (error);
+
+	nvlist_t *vdev_errlist = fnvlist_alloc();
+	int total_errors = spa_vdev_trim(spa, vdev_guids, cmd_type,
+	    rate, fulltrim, vdev_errlist);
+
+	if (fnvlist_size(vdev_errlist) > 0)
+		fnvlist_add_nvlist(outnvl, ZPOOL_TRIM_VDEVS, vdev_errlist);
+
 	fnvlist_free(vdev_errlist);
 
 	spa_close(spa, FTAG);
@@ -6564,6 +6618,11 @@ zfs_ioctl_init(void)
 	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE, B_TRUE,
 	    zfs_keys_pool_initialize, ARRAY_SIZE(zfs_keys_pool_initialize));
 
+	zfs_ioctl_register("trim", ZFS_IOC_POOL_TRIM,
+	    zfs_ioc_pool_trim, zfs_secpolicy_config, POOL_NAME,
+	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY, B_TRUE, B_TRUE,
+	    zfs_keys_pool_trim, ARRAY_SIZE(zfs_keys_pool_trim));
+
 	/* IOCTLS that use the legacy function signature */
 
 	zfs_ioctl_register_legacy(ZFS_IOC_POOL_FREEZE, zfs_ioc_pool_freeze,
@@ -6573,8 +6632,6 @@ zfs_ioctl_init(void)
 	    zfs_secpolicy_config, B_TRUE, POOL_CHECK_NONE);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_SCAN,
 	    zfs_ioc_pool_scan);
-	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_TRIM,
-	    zfs_ioc_pool_trim);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_POOL_UPGRADE,
 	    zfs_ioc_pool_upgrade);
 	zfs_ioctl_register_pool_modify(ZFS_IOC_VDEV_ADD,

@@ -47,22 +47,6 @@ typedef enum vdev_dtl_type {
 	DTL_TYPES
 } vdev_dtl_type_t;
 
-typedef struct vdev_trim_info {
-	vdev_t *vti_vdev;
-	uint64_t vti_txg;	/* ignored for manual trim */
-	void (*vti_done_cb)(void *);
-	void *vti_done_arg;
-} vdev_trim_info_t;
-
-typedef enum vdev_trim_stat_flags
-{
-	TRIM_STAT_OP		= 1 << 0,
-	TRIM_STAT_RQ_HISTO	= 1 << 1,
-	TRIM_STAT_L_HISTO	= 1 << 2,
-} vdev_trim_stat_flags_t;
-
-#define	TRIM_STAT_ALL	(TRIM_STAT_OP | TRIM_STAT_RQ_HISTO | TRIM_STAT_L_HISTO)
-
 extern int zfs_nocacheflush;
 
 extern void vdev_dbgmsg(vdev_t *vd, const char *fmt, ...);
@@ -112,13 +96,13 @@ extern void vdev_metaslab_set_size(vdev_t *);
 extern void vdev_expand(vdev_t *vd, uint64_t txg);
 extern void vdev_split(vdev_t *vd);
 extern void vdev_deadman(vdev_t *vd, char *tag);
+extern void vdev_xlate(vdev_t *vd, const range_seg_t *logical_rs,
+    range_seg_t *physical_rs);
 
 extern void vdev_get_stats_ex(vdev_t *vd, vdev_stat_t *vs, vdev_stat_ex_t *vsx);
 extern void vdev_get_stats(vdev_t *vd, vdev_stat_t *vs);
 extern void vdev_clear_stats(vdev_t *vd);
 extern void vdev_stat_update(zio_t *zio, uint64_t psize);
-extern void vdev_trim_stat_update(zio_t *zio, uint64_t psize,
-    vdev_trim_stat_flags_t flags);
 extern void vdev_scan_stat_init(vdev_t *vd);
 extern void vdev_propagate_state(vdev_t *vd);
 extern void vdev_set_state(vdev_t *vd, boolean_t isopen, vdev_state_t state,
@@ -181,12 +165,6 @@ typedef enum vdev_config_flag {
 extern void vdev_top_config_generate(spa_t *spa, nvlist_t *config);
 extern nvlist_t *vdev_config_generate(spa_t *spa, vdev_t *vd,
     boolean_t getstats, vdev_config_flag_t flags);
-
-extern void vdev_man_trim(vdev_trim_info_t *vti);
-extern void vdev_man_trim_full(vdev_trim_info_t *vti);
-extern void vdev_auto_trim(vdev_trim_info_t *vti);
-extern void vdev_trim_stop_wait(vdev_t *vd);
-extern boolean_t vdev_trim_should_stop(vdev_t *vd);
 
 /*
  * Label routines

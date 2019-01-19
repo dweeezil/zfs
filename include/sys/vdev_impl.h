@@ -79,7 +79,7 @@ typedef boolean_t vdev_need_resilver_func_t(vdev_t *vd, uint64_t, size_t);
 typedef void	vdev_hold_func_t(vdev_t *vd);
 typedef void	vdev_rele_func_t(vdev_t *vd);
 typedef void	vdev_trim_func_t(vdev_t *vd, zio_t *pio,
-    dkioc_free_list_t *trim_exts, boolean_t auto_trim);
+    dkioc_free_list_t *trim_exts, zio_priority_t priority);
 
 typedef void	vdev_remap_cb_t(uint64_t inner_offset, vdev_t *vd,
     uint64_t offset, uint64_t size, void *arg);
@@ -103,6 +103,7 @@ typedef const struct vdev_ops {
 	vdev_hold_func_t		*vdev_op_hold;
 	vdev_rele_func_t		*vdev_op_rele;
 	vdev_remap_func_t		*vdev_op_remap;
+	vdev_trim_func_t		*vdev_op_trim;
 
 	/*
 	 * For translating ranges from non-leaf vdevs (e.g. raidz) to leaves.
@@ -110,7 +111,6 @@ typedef const struct vdev_ops {
 	 */
 	vdev_xlation_func_t		*vdev_op_xlate;
 
-	vdev_trim_func_t		*vdev_op_trim;
 	char				vdev_op_type[16];
 	boolean_t			vdev_op_leaf;
 } vdev_ops_t;
@@ -266,6 +266,7 @@ struct vdev {
 	/* pool checkpoint related */
 	space_map_t	*vdev_checkpoint_sm;	/* contains reserved blocks */
 
+	/* Initialize related */
 	boolean_t	vdev_initialize_exit_wanted;
 	vdev_initializing_state_t	vdev_initialize_state;
 	list_node_t	vdev_initialize_node;
@@ -280,10 +281,32 @@ struct vdev {
 	uint64_t	vdev_initialize_bytes_done;
 	time_t		vdev_initialize_action_time;	/* start and end time */
 
-	/* for limiting outstanding I/Os */
+	/* TRIM related */
+	boolean_t	vdev_trim_exit_wanted;
+	vdev_trim_state_t	vdev_trim_state;
+	list_node_t	vdev_trim_node;
+	kthread_t	*vdev_trim_thread;
+	/* Protects vdev_trim_thread and vdev_trim_state. */
+	kmutex_t	vdev_trim_lock;
+	kcondvar_t	vdev_trim_cv;
+	uint64_t	vdev_trim_offset[TXG_SIZE];
+	uint64_t	vdev_trim_last_offset;
+	range_tree_t	*vdev_trim_tree;  /* valid while trimming */
+
+	uint64_t	vdev_trim_bytes_est;
+	uint64_t	vdev_trim_bytes_done;
+	uint64_t	vdev_trim_rate;	/* requested rate (bytes/sec) */
+	uint64_t	vdev_trim_full; /* requested full TRIM */
+	uint64_t	vdev_trim_rate_est;	/* est rate (bytes/sec) */
+	time_t		vdev_trim_action_time;	/* start and end time */
+
+	/* for limiting outstanding I/Os (initialize and TRIM) */
 	kmutex_t	vdev_initialize_io_lock;
 	kcondvar_t	vdev_initialize_io_cv;
 	uint64_t	vdev_initialize_inflight;
+	kmutex_t	vdev_trim_io_lock;
+	kcondvar_t	vdev_trim_io_cv;
+	uint64_t	vdev_trim_inflight;
 
 	/*
 	 * Values stored in the config for an indirect or removing vdev.
@@ -318,20 +341,6 @@ struct vdev {
 	kmutex_t	vdev_obsolete_lock;
 	range_tree_t	*vdev_obsolete_segments;
 	space_map_t	*vdev_obsolete_sm;
-
-	boolean_t	vdev_man_trimming; /* manual trim is ongoing	*/
-	uint64_t	vdev_trim_prog;	/* trim progress in bytes	*/
-	/*
-	 * Because trim zios happen outside of the DMU transactional engine,
-	 * we cannot rely on the DMU quiescing async trim zios to the vdev
-	 * before doing pool reconfiguration tasks. Therefore we count them
-	 * separately and quiesce them using vdev_trim_stop_wait before
-	 * removing or changing vdevs.
-	 */
-	kmutex_t	vdev_trim_zios_lock;
-	kcondvar_t	vdev_trim_zios_cv;
-	uint64_t	vdev_trim_zios;	/* # of in-flight async trim zios */
-	boolean_t	vdev_trim_zios_stop;	/* see zio_trim_should_bypass */
 
 	/*
 	 * Protects the vdev_scan_io_queue field itself as well as the

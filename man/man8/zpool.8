@@ -192,7 +192,7 @@
 .Nm
 .Cm status
 .Oo Fl c Ar SCRIPT Oc
-.Op Fl DigLpPsvx
+.Op Fl DigLpPstvx
 .Op Fl T Sy u Ns | Ns Sy d
 .Oo Ar pool Oc Ns ...
 .Op Ar interval Op Ar count
@@ -2312,7 +2312,7 @@ and automatically import it.
 .Nm
 .Cm status
 .Op Fl c Op Ar SCRIPT1 Ns Oo , Ns Ar SCRIPT2 Oc Ns ...
-.Op Fl DigLpPsvx
+.Op Fl DigLpPstvx
 .Op Fl T Sy u Ns | Ns Sy d
 .Oo Ar pool Oc Ns ...
 .Op Ar interval Op Ar count
@@ -2369,6 +2369,8 @@ didn't complete in \fBzio_slow_io_ms\fR milliseconds (default 30 seconds).
 This does not necessarily mean the IOs failed to complete, just took an
 unreasonably long amount of time.  This may indicate a problem with the
 underlying storage.
+.It Fl t
+Display vdev TRIM status.
 .It Fl T Sy u Ns | Ns Sy d
 Display a time stamp.
 Specify

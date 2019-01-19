@@ -31,6 +31,7 @@
 #include <sys/spa_impl.h>
 #include <sys/vdev_disk.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/abd.h>
 #include <sys/fs/zfs.h>
 #include <sys/zio.h>
@@ -324,8 +325,6 @@ vdev_disk_open(vdev_t *v, uint64_t *psize, uint64_t *max_psize,
 	} else {
 		vd->vd_bdev = bdev;
 		v->vdev_tsd = vd;
-		/* Reset TRIM flag, as underlying device support may have changed */
-		v->vdev_notrim = B_FALSE;
 		rw_exit(&vd->vd_lock);
 	}
 
@@ -921,7 +920,7 @@ vdev_disk_io_start(zio_t *zio)
 
 		case DKIOCFREE:
 
-			if (!zfs_trim)
+			if (!zfs_trim_enabled)
 				break;
 
 			/*

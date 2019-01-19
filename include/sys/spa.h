@@ -795,7 +795,7 @@ extern int spa_scan_get_stats(spa_t *spa, pool_scan_stat_t *ps);
 #define	SPA_ASYNC_REMOVE_DONE			0x40
 #define	SPA_ASYNC_REMOVE_STOP			0x80
 #define	SPA_ASYNC_INITIALIZE_RESTART		0x100
-#define	SPA_ASYNC_MAN_TRIM_TASKQ_DESTROY	0x200
+#define	SPA_ASYNC_MAN_TRIM_RESTART		0x200
 #define	SPA_ASYNC_AUTO_TRIM_TASKQ_CREATE	0x400
 #define	SPA_ASYNC_AUTO_TRIM_TASKQ_DESTROY	0x800
 
@@ -815,6 +815,8 @@ extern int spa_vdev_remove(spa_t *spa, uint64_t guid, boolean_t unspare);
 extern boolean_t spa_vdev_remove_active(spa_t *spa);
 extern int spa_vdev_initialize(spa_t *spa, nvlist_t *nv, uint64_t cmd_type,
     nvlist_t *vdev_errlist);
+extern int spa_vdev_trim(spa_t *spa, nvlist_t *nv, uint64_t cmd_type,
+    uint64_t rate, boolean_t fulltrim, nvlist_t *vdev_errlist);
 extern int spa_vdev_setpath(spa_t *spa, uint64_t guid, const char *newpath);
 extern int spa_vdev_setfru(spa_t *spa, uint64_t guid, const char *newfru);
 extern int spa_vdev_split_mirror(spa_t *spa, char *newname, nvlist_t *config,
@@ -837,13 +839,6 @@ extern void spa_l2cache_drop(spa_t *spa);
 extern int spa_scan(spa_t *spa, pool_scan_func_t func);
 extern int spa_scan_stop(spa_t *spa);
 extern int spa_scrub_pause_resume(spa_t *spa, pool_scrub_cmd_t flag);
-
-/* trimming */
-extern void spa_man_trim(spa_t *spa, uint64_t rate, boolean_t fulltrim);
-extern void spa_man_trim_stop(spa_t *spa);
-extern void spa_get_trim_prog(spa_t *spa, uint64_t *prog, uint64_t *rate,
-    uint64_t *start_time, uint64_t *stop_time);
-extern void spa_trim_stop_wait(spa_t *spa);
 
 /* spa syncing */
 extern void spa_sync(spa_t *spa, uint64_t txg); /* only for DMU use */

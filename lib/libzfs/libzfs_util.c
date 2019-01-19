@@ -291,6 +291,10 @@ libzfs_error_description(libzfs_handle_t *hdl)
 	case EZFS_NO_INITIALIZE:
 		return (dgettext(TEXT_DOMAIN, "there is no active "
 		    "initialization"));
+	case EZFS_TRIMMING:
+		return (dgettext(TEXT_DOMAIN, "currently trimming"));
+	case EZFS_NO_TRIM:
+		return (dgettext(TEXT_DOMAIN, "there is no active trim"));
 	case EZFS_UNKNOWN:
 		return (dgettext(TEXT_DOMAIN, "unknown error"));
 	default:

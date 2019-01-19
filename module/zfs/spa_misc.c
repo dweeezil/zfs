@@ -39,6 +39,7 @@
 #include <sys/zil.h>
 #include <sys/vdev_impl.h>
 #include <sys/vdev_initialize.h>
+#include <sys/vdev_trim.h>
 #include <sys/vdev_file.h>
 #include <sys/vdev_raidz.h>
 #include <sys/metaslab.h>
@@ -668,7 +669,6 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 	mutex_init(&spa->spa_vdev_top_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_feat_stats_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_auto_trim_lock, NULL, MUTEX_DEFAULT, NULL);
-	mutex_init(&spa->spa_man_trim_lock, NULL, MUTEX_DEFAULT, NULL);
 
 	cv_init(&spa->spa_async_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_evicting_os_cv, NULL, CV_DEFAULT, NULL);
@@ -676,8 +676,6 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 	cv_init(&spa->spa_scrub_io_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_suspend_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_auto_trim_done_cv, NULL, CV_DEFAULT, NULL);
-	cv_init(&spa->spa_man_trim_update_cv, NULL, CV_DEFAULT, NULL);
-	cv_init(&spa->spa_man_trim_done_cv, NULL, CV_DEFAULT, NULL);
 
 	for (int t = 0; t < TXG_SIZE; t++)
 		bplist_create(&spa->spa_free_bplist[t]);
@@ -831,8 +829,6 @@ spa_remove(spa_t *spa)
 	cv_destroy(&spa->spa_scrub_io_cv);
 	cv_destroy(&spa->spa_suspend_cv);
 	cv_destroy(&spa->spa_auto_trim_done_cv);
-	cv_destroy(&spa->spa_man_trim_update_cv);
-	cv_destroy(&spa->spa_man_trim_done_cv);
 
 	mutex_destroy(&spa->spa_async_lock);
 	mutex_destroy(&spa->spa_errlist_lock);
@@ -847,7 +843,6 @@ spa_remove(spa_t *spa)
 	mutex_destroy(&spa->spa_vdev_top_lock);
 	mutex_destroy(&spa->spa_feat_stats_lock);
 	mutex_destroy(&spa->spa_auto_trim_lock);
-	mutex_destroy(&spa->spa_man_trim_lock);
 
 	kmem_free(spa, sizeof (spa_t));
 }
@@ -1167,8 +1162,6 @@ spa_vdev_enter(spa_t *spa)
 	mutex_enter(&spa->spa_vdev_top_lock);
 	mutex_enter(&spa_namespace_lock);
 	mutex_enter(&spa->spa_auto_trim_lock);
-	mutex_enter(&spa->spa_man_trim_lock);
-	spa_trim_stop_wait(spa);
 	return (spa_vdev_config_enter(spa));
 }
 
@@ -1245,6 +1238,10 @@ spa_vdev_config_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error, char *tag)
 			vdev_initialize_stop(vd, VDEV_INITIALIZE_CANCELED,
 			    NULL);
 			mutex_exit(&vd->vdev_initialize_lock);
+
+			mutex_enter(&vd->vdev_trim_lock);
+			vdev_trim_stop(vd, VDEV_TRIM_CANCELED, NULL);
+			mutex_exit(&vd->vdev_trim_lock);
 		}
 
 		spa_config_enter(spa, SCL_ALL, spa, RW_WRITER);
@@ -1269,7 +1266,6 @@ int
 spa_vdev_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error)
 {
 	spa_vdev_config_exit(spa, vd, txg, error, FTAG);
-	mutex_exit(&spa->spa_man_trim_lock);
 	mutex_exit(&spa->spa_auto_trim_lock);
 	mutex_exit(&spa_namespace_lock);
 	mutex_exit(&spa->spa_vdev_top_lock);
@@ -2616,34 +2612,6 @@ spa_auto_trim_taskq_create(spa_t *spa)
 }
 
 /*
- * Creates the taskq for dispatching manual trim. This taskq is recreated
- * each time `zpool trim <poolname>' is issued and destroyed after the run
- * completes in an async spa request.
- */
-void
-spa_man_trim_taskq_create(spa_t *spa)
-{
-	char *name = kmem_alloc(MAXPATHLEN, KM_SLEEP);
-
-	ASSERT(MUTEX_HELD(&spa->spa_man_trim_lock));
-	spa_async_unrequest(spa, SPA_ASYNC_MAN_TRIM_TASKQ_DESTROY);
-	if (spa->spa_man_trim_taskq != NULL) {
-		/*
-		 * The async taskq destroy has been pre-empted, so just
-		 * return, the taskq is still good to use.
-		 */
-		return;
-	}
-	(void) snprintf(name, MAXPATHLEN, "z_mtrim_%s", spa->spa_name);
-	spa->spa_man_trim_taskq = taskq_create(name,
-	    spa->spa_root_vdev->vdev_children, minclsyspri,
-	    spa->spa_root_vdev->vdev_children,
-	    spa->spa_root_vdev->vdev_children, TASKQ_PREPOPULATE);
-	VERIFY(spa->spa_man_trim_taskq != NULL);
-	kmem_free(name, MAXPATHLEN);
-}
-
-/*
  * Destroys the taskq created in spa_auto_trim_taskq_create. The taskq
  * is only destroyed when the autotrim property is set to `off'.
  */
@@ -2656,27 +2624,6 @@ spa_auto_trim_taskq_destroy(spa_t *spa)
 		cv_wait(&spa->spa_auto_trim_done_cv, &spa->spa_auto_trim_lock);
 	taskq_destroy(spa->spa_auto_trim_taskq);
 	spa->spa_auto_trim_taskq = NULL;
-}
-
-/*
- * Destroys the taskq created in spa_man_trim_taskq_create. The taskq is
- * destroyed after a manual trim run completes from an async spa request.
- * There is a bit of lag between an async request being issued at the
- * completion of a trim run and it finally being acted on, hence why this
- * function checks if new manual trimming threads haven't been re-spawned.
- * If they have, we assume the async spa request been preempted by another
- * manual trim request and we back off.
- */
-void
-spa_man_trim_taskq_destroy(spa_t *spa)
-{
-	ASSERT(MUTEX_HELD(&spa->spa_man_trim_lock));
-	ASSERT(spa->spa_man_trim_taskq != NULL);
-	if (spa->spa_num_man_trimming != 0)
-		/* another trim got started before we got here, back off */
-		return;
-	taskq_destroy(spa->spa_man_trim_taskq);
-	spa->spa_man_trim_taskq = NULL;
 }
 
 #if defined(_KERNEL)

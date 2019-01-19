@@ -70,7 +70,8 @@ typedef enum trace_alloc_type {
 	TRACE_ENOSPC		= -6ULL,
 	TRACE_CONDENSING	= -7ULL,
 	TRACE_VDEV_ERROR	= -8ULL,
-	TRACE_INITIALIZING	= -9ULL
+	TRACE_INITIALIZING	= -9ULL,
+	TRACE_TRIMMING		= -10ULL,
 } trace_alloc_type_t;
 
 #define	METASLAB_WEIGHT_PRIMARY		(1ULL << 63)
@@ -277,6 +278,11 @@ struct metaslab_group {
 	boolean_t		mg_initialize_updating;
 	kmutex_t		mg_ms_initialize_lock;
 	kcondvar_t		mg_ms_initialize_cv;
+
+	int			mg_ms_trimming;
+	boolean_t		mg_trim_updating;
+	kmutex_t		mg_ms_trim_lock;
+	kcondvar_t		mg_ms_trim_cv;
 };
 
 /*
@@ -353,10 +359,13 @@ struct metaslab {
 	range_tree_t	*ms_allocating[TXG_SIZE];
 	range_tree_t	*ms_allocatable;
 
-	range_tree_t	*ms_cur_ts;		/* currently prepared trims */
-	range_tree_t	*ms_prev_ts;		/* previous (aging) trims */
+	/*
+	 * The following range trees are used to track pending trims.
+	 */
+	range_tree_t	*ms_cur_ts;	/* currently prepared trims */
+	range_tree_t	*ms_prev_ts;	/* previous (aging) trims */
+	range_tree_t	*ms_trimming_ts; /* in flight trims */
 	kcondvar_t	ms_trim_cv;
-	range_tree_t	*ms_trimming_ts;	/* in flight trims */
 
 	/*
 	 * The following range trees are accessed only from syncing context.
@@ -374,6 +383,7 @@ struct metaslab {
 	uint64_t	ms_condense_checked_txg;
 
 	uint64_t	ms_initializing; /* leaves initializing this ms */
+	uint64_t	ms_trimming;	/* leaves trimming this ms */
 
 	/*
 	 * We must always hold the ms_lock when modifying ms_loaded

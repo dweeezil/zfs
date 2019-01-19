@@ -710,12 +710,6 @@ vdev_config_generate(spa_t *spa, vdev_t *vd, boolean_t getstats,
 			fnvlist_add_uint64(nv, ZPOOL_CONFIG_ORIG_GUID,
 			    vd->vdev_orig_guid);
 		}
-
-		/* grab per-leaf-vdev trim stats */
-		if (getstats) {
-			fnvlist_add_uint64(nv, ZPOOL_CONFIG_TRIM_PROG,
-			    vd->vdev_trim_prog);
-		}
 	}
 
 	return (nv);

@@ -52,6 +52,7 @@
 #include <sys/dsl_scan.h>
 #include <sys/abd.h>
 #include <sys/vdev_initialize.h>
+#include <sys/vdev_trim.h>
 #include <sys/zvol.h>
 #include <sys/zfs_ratelimit.h>
 #include <sys/trace_vdev.h>
@@ -199,43 +200,6 @@ static vdev_ops_t *vdev_ops_table[] = {
 	&vdev_indirect_ops,
 	NULL
 };
-
-/*
- * If we accumulate a lot of trim extents due to trim running slow, this
- * is the memory pressure valve. We limit the amount of memory consumed
- * by the extents in memory to physmem/zfs_trim_mem_lim_fact (by default
- * 2%). If we exceed this limit, we start throwing out new extents
- * without queueing them.
- */
-int zfs_trim_mem_lim_fact = 50;
-
-/*
- * How many TXG's worth of updates should be aggregated per TRIM/UNMAP
- * issued to the underlying vdev. We keep two range trees of extents
- * (called "trim sets") to be trimmed per metaslab, the `current' and
- * the `previous' TS. New free's are added to the current TS. Then,
- * once `zfs_txgs_per_trim' transactions have elapsed, the `current'
- * TS becomes the `previous' TS and a new, blank TS is created to be
- * the new `current', which will then start accumulating any new frees.
- * Once another zfs_txgs_per_trim TXGs have passed, the previous TS's
- * extents are trimmed, the TS is destroyed and the current TS again
- * becomes the previous TS.
- * This serves to fulfill two functions: aggregate many small frees
- * into fewer larger trim operations (which should help with devices
- * which do not take so kindly to them) and to allow for disaster
- * recovery (extents won't get trimmed immediately, but instead only
- * after passing this rather long timeout, thus preserving
- * 'zfs import -F' functionality).
- * The exact default value of this tunable is a tradeoff between:
- * 1) Keeping the trim commands reasonably small.
- * 2) Keeping the ability to rollback back for as many txgs as possible.
- * 3) Waiting around too long that the user starts to get uneasy about not
- *	seeing any space being freed after they remove some files.
- * The default value of 32 is the maximum number of uberblocks in a vdev
- * label, assuming a 4k physical sector size (which seems to be the almost
- * universal smallest sector size used in SSDs).
- */
-unsigned int zfs_txgs_per_trim = 32;
 
 /*
  * Given a vdev type, return the appropriate ops vector.
@@ -570,6 +534,7 @@ vdev_alloc_common(spa_t *spa, uint_t id, uint64_t guid, vdev_ops_t *ops)
 	list_link_init(&vd->vdev_config_dirty_node);
 	list_link_init(&vd->vdev_state_dirty_node);
 	list_link_init(&vd->vdev_initialize_node);
+	list_link_init(&vd->vdev_trim_node);
 	mutex_init(&vd->vdev_dtl_lock, NULL, MUTEX_NOLOCKDEP, NULL);
 	mutex_init(&vd->vdev_stat_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&vd->vdev_probe_lock, NULL, MUTEX_DEFAULT, NULL);
@@ -578,6 +543,10 @@ vdev_alloc_common(spa_t *spa, uint_t id, uint64_t guid, vdev_ops_t *ops)
 	mutex_init(&vd->vdev_initialize_io_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&vd->vdev_initialize_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&vd->vdev_initialize_io_cv, NULL, CV_DEFAULT, NULL);
+	mutex_init(&vd->vdev_trim_lock, NULL, MUTEX_DEFAULT, NULL);
+	mutex_init(&vd->vdev_trim_io_lock, NULL, MUTEX_DEFAULT, NULL);
+	cv_init(&vd->vdev_trim_cv, NULL, CV_DEFAULT, NULL);
+	cv_init(&vd->vdev_trim_io_cv, NULL, CV_DEFAULT, NULL);
 
 	for (int t = 0; t < DTL_TYPES; t++) {
 		vd->vdev_dtl[t] = range_tree_create(NULL, NULL);
@@ -589,9 +558,6 @@ vdev_alloc_common(spa_t *spa, uint_t id, uint64_t guid, vdev_ops_t *ops)
 	vd->vdev_stat.vs_timestamp = gethrtime();
 	vdev_queue_init(vd);
 	vdev_cache_init(vd);
-
-	mutex_init(&vd->vdev_trim_zios_lock, NULL, MUTEX_DEFAULT, NULL);
-	cv_init(&vd->vdev_trim_zios_cv, NULL, CV_DEFAULT, NULL);
 
 	return (vd);
 }
@@ -1017,9 +983,10 @@ vdev_free(vdev_t *vd)
 	mutex_destroy(&vd->vdev_initialize_io_lock);
 	cv_destroy(&vd->vdev_initialize_io_cv);
 	cv_destroy(&vd->vdev_initialize_cv);
-	ASSERT0(vd->vdev_trim_zios);
-	mutex_destroy(&vd->vdev_trim_zios_lock);
-	cv_destroy(&vd->vdev_trim_zios_cv);
+	mutex_destroy(&vd->vdev_trim_lock);
+	mutex_destroy(&vd->vdev_trim_io_lock);
+	cv_destroy(&vd->vdev_trim_io_cv);
+	cv_destroy(&vd->vdev_trim_cv);
 
 	zfs_ratelimit_fini(&vd->vdev_delay_rl);
 	zfs_ratelimit_fini(&vd->vdev_checksum_rl);
@@ -3946,7 +3913,7 @@ vdev_get_stats_ex(vdev_t *vd, vdev_stat_t *vs, vdev_stat_ex_t *vsx)
 			vs->vs_rsize += VDEV_LABEL_START_SIZE +
 			    VDEV_LABEL_END_SIZE;
 			/*
-			 * Report intializing progress. Since we don't
+			 * Report initializing progress. Since we don't
 			 * have the initializing locks held, this is only
 			 * an estimate (although a fairly accurate one).
 			 */
@@ -3957,6 +3924,16 @@ vdev_get_stats_ex(vdev_t *vd, vdev_stat_t *vs, vdev_stat_ex_t *vsx)
 			vs->vs_initialize_state = vd->vdev_initialize_state;
 			vs->vs_initialize_action_time =
 			    vd->vdev_initialize_action_time;
+
+			/*
+			 * Report manual TRIM progress. Since we don't have
+			 * the manual TRIM locks held, this is only an
+			 * estimate (although fairly accurate one).
+			 */
+			vs->vs_trim_bytes_done = vd->vdev_trim_bytes_done;
+			vs->vs_trim_bytes_est = vd->vdev_trim_bytes_est;
+			vs->vs_trim_state = vd->vdev_trim_state;
+			vs->vs_trim_action_time = vd->vdev_trim_action_time;
 		}
 		/*
 		 * Report expandable space on top-level, non-auxillary devices
@@ -4210,33 +4187,6 @@ vdev_deflated_space(vdev_t *vd, int64_t space)
 	ASSERT(vd->vdev_deflate_ratio != 0 || vd->vdev_isl2cache);
 
 	return ((space >> SPA_MINBLOCKSHIFT) * vd->vdev_deflate_ratio);
-}
-
-/*
- * Update the aggregate statistics for a TRIM zio.
- */
-void
-vdev_trim_stat_update(zio_t *zio, uint64_t psize, vdev_trim_stat_flags_t flags)
-{
-	vdev_stat_trim_t *vsd = zio->io_dfl_stats;
-	hrtime_t now = gethrtime();
-	hrtime_t io_delta = io_delta = now - zio->io_timestamp;
-	hrtime_t io_delay = now - zio->io_delay;
-
-	if (flags & TRIM_STAT_OP) {
-		vsd->vsd_ops++;
-		vsd->vsd_bytes += psize;
-	}
-
-	if (flags & TRIM_STAT_RQ_HISTO) {
-		vsd->vsd_ind_histo[RQ_HISTO(psize)]++;
-	}
-
-	if (flags & TRIM_STAT_L_HISTO) {
-		vsd->vsd_queue_histo[L_HISTO(io_delta - io_delay)]++;
-		vsd->vsd_disk_histo[L_HISTO(io_delay)]++;
-		vsd->vsd_total_histo[L_HISTO(io_delta)]++;
-	}
 }
 
 /*
@@ -4782,233 +4732,46 @@ vdev_set_deferred_resilver(spa_t *spa, vdev_t *vd)
 }
 
 /*
- * Implements the per-vdev portion of manual TRIM. The function passes over
- * all metaslabs on this vdev and performs a metaslab_trim_all on them. It's
- * also responsible for rate-control if spa_man_trim_rate is non-zero.
- *
- * If fulltrim is set, metaslabs without spacemaps are also trimmed.
+ * Translate a logical range to the physical range for the specified vdev_t.
+ * This function is initially called with a leaf vdev and will walk each
+ * parent vdev until it reaches a top-level vdev. Once the top-level is
+ * reached the physical range is initialized and the recursive function
+ * begins to unwind. As it unwinds it calls the parent's vdev specific
+ * translation function to do the real conversion.
  */
-static void
-vdev_man_trim_impl(vdev_trim_info_t *vti, boolean_t fulltrim)
+void
+vdev_xlate(vdev_t *vd, const range_seg_t *logical_rs, range_seg_t *physical_rs)
 {
-	hrtime_t t = gethrtime();
-	spa_t *spa = vti->vti_vdev->vdev_spa;
-	vdev_t *vd = vti->vti_vdev;
-	uint64_t ms_count;
-	uint64_t i, cursor;
-	boolean_t was_loaded = B_FALSE;
-
-	vd->vdev_man_trimming = B_TRUE;
-	vd->vdev_trim_prog = 0;
-
-	spa_config_enter(spa, SCL_STATE_ALL, FTAG, RW_READER);
-	ms_count = vd->vdev_ms_count;
-	spa_config_exit(spa, SCL_STATE_ALL, FTAG);
-
-	ASSERT(vd->vdev_ms[0] != NULL);
-	cursor = vd->vdev_ms[0]->ms_start;
-	i = 0;
-	while (i < ms_count && !spa->spa_man_trim_stop) {
-		uint64_t delta;
-		metaslab_t *msp = vd->vdev_ms[i];
-		zio_t *trim_io;
-
-		if (msp->ms_sm == NULL && !fulltrim) {
-			/*
-			 * If the space map has not been allocated and a
-			 * partial trim was requested move on to the next one.
-			 */
-			i++;
-			if (i < vti->vti_vdev->vdev_ms_count)
-				cursor = vd->vdev_ms[i]->ms_start;
-			continue;
-		}
-
-		trim_io = metaslab_trim_all(msp, &cursor, &delta, &was_loaded);
-
-		if (trim_io != NULL) {
-			ASSERT3U(cursor, >=, vd->vdev_ms[0]->ms_start);
-			vd->vdev_trim_prog += delta;
-			(void) zio_wait(trim_io);
-		} else {
-			/*
-			 * If there was nothing more left to trim, that means
-			 * this metaslab is either done trimming, or we
-			 * couldn't load it, move to the next one.
-			 */
-			i++;
-			if (i < vti->vti_vdev->vdev_ms_count)
-				ASSERT3U(vd->vdev_ms[i]->ms_start, ==, cursor);
-		}
-
-		/* delay loop to handle fixed-rate trimming */
-		for (;;) {
-			uint64_t rate = spa->spa_man_trim_rate;
-			hrtime_t sleep_delay;
-			hrtime_t t1;
-
-			if (rate == 0) {
-				/* No delay, just update 't' and move on. */
-				t = gethrtime();
-				break;
-			}
-
-			sleep_delay = SEC2NSEC(delta) / rate;
-			mutex_enter(&spa->spa_man_trim_lock);
-			t1 = cv_timedwait_hires(&spa->spa_man_trim_update_cv,
-			    &spa->spa_man_trim_lock, t + sleep_delay,
-			    MSEC2NSEC(1), CALLOUT_FLAG_ABSOLUTE);
-			mutex_exit(&spa->spa_man_trim_lock);
-
-			/* If interrupted, don't try to relock, get out */
-			if (spa->spa_man_trim_stop)
-				goto out;
-
-			/* Timeout passed, move on to the next chunk. */
-			if (t1 == -1) {
-				t += sleep_delay;
-				break;
-			}
-		}
+	/*
+	 * Walk up the vdev tree
+	 */
+	if (vd != vd->vdev_top) {
+		vdev_xlate(vd->vdev_parent, logical_rs, physical_rs);
+	} else {
+		/*
+		 * We've reached the top-level vdev, initialize the
+		 * physical range to the logical range and start to
+		 * unwind.
+		 */
+		physical_rs->rs_start = logical_rs->rs_start;
+		physical_rs->rs_end = logical_rs->rs_end;
+		return;
 	}
-out:
-	vd->vdev_man_trimming = B_FALSE;
 
-	ASSERT(vti->vti_done_cb != NULL);
-	vti->vti_done_cb(vti->vti_done_arg);
-
-	kmem_free(vti, sizeof (*vti));
-}
-
-void
-vdev_man_trim(vdev_trim_info_t *vti)
-{
-	vdev_man_trim_impl(vti, B_FALSE);
-}
-
-void
-vdev_man_trim_full(vdev_trim_info_t *vti)
-{
-	vdev_man_trim_impl(vti, B_TRUE);
-}
-
-/*
- * Runs through all metaslabs on the vdev and does their autotrim processing.
- */
-void
-vdev_auto_trim(vdev_trim_info_t *vti)
-{
-	vdev_t *vd = vti->vti_vdev;
-	spa_t *spa = vd->vdev_spa;
-	uint64_t txg = vti->vti_txg;
-	uint64_t txgs_per_trim = MAX(zfs_txgs_per_trim, 1);
-	uint64_t mlim = 0, mused = 0;
-	uint64_t ms_count = vd->vdev_ms_count;
-	boolean_t preserve_spilled;
-
-	ASSERT3P(vd->vdev_top, ==, vd);
-
-	if (vd->vdev_man_trimming)
-		goto out;
+	vdev_t *pvd = vd->vdev_parent;
+	ASSERT3P(pvd, !=, NULL);
+	ASSERT3P(pvd->vdev_ops->vdev_op_xlate, !=, NULL);
 
 	/*
-	 * In case trimming is slow and the previous trim run has no yet
-	 * finished, we order metaslab_auto_trim to keep the extents that
-	 * were about to be trimmed so that they can be trimmed in a future
-	 * autotrim run. But we only do so if the amount of memory consumed
-	 * by the extents doesn't exceed a threshold, otherwise we drop them.
+	 * As this recursive function unwinds, translate the logical
+	 * range into its physical components by calling the
+	 * vdev specific translate function.
 	 */
-	for (uint64_t i = 0; i < ms_count; i++)
-		mused += metaslab_trim_mem_used(vd->vdev_ms[i]);
-	mlim = (physmem * PAGESIZE) / (zfs_trim_mem_lim_fact *
-	    spa->spa_root_vdev->vdev_children);
-	preserve_spilled = mused < mlim;
-	DTRACE_PROBE3(autotrim__mem__lim, vdev_t *, vd, uint64_t, mused,
-	    uint64_t, mlim);
+	range_seg_t intermediate = { { { 0, 0 } } };
+	pvd->vdev_ops->vdev_op_xlate(vd, physical_rs, &intermediate);
 
-	/*
-	 * Since we typically have hundreds of metaslabs per vdev, but we only
-	 * trim them once every zfs_txgs_per_trim txgs, it'd be best if we
-	 * could sequence the TRIM commands from all metaslabs so that they
-	 * don't all always pound the device in the same txg. We do so taking
-	 * the txg number modulo txgs_per_trim and then skipping by
-	 * txgs_per_trim. Thus, for the default 200 metaslabs and 32
-	 * txgs_per_trim, we'll only be trimming ~6.25 metaslabs per txg.
-	 */
-	for (uint64_t i = txg % txgs_per_trim; i < ms_count; i += txgs_per_trim)
-		metaslab_auto_trim(vd->vdev_ms[i], preserve_spilled);
-
-out:
-	ASSERT(vti->vti_done_cb != NULL);
-	vti->vti_done_cb(vti->vti_done_arg);
-
-	kmem_free(vti, sizeof (*vti));
-}
-
-static void
-trim_stop_set(vdev_t *vd, boolean_t flag)
-{
-	mutex_enter(&vd->vdev_trim_zios_lock);
-	vd->vdev_trim_zios_stop = flag;
-	mutex_exit(&vd->vdev_trim_zios_lock);
-
-	for (uint64_t i = 0; i < vd->vdev_children; i++) {
-		vdev_t *cvd = vd->vdev_child[i];
-		if (vdev_is_concrete(cvd))
-			trim_stop_set(cvd, flag);
-	}
-}
-
-static void
-trim_stop_wait(vdev_t *vd)
-{
-	mutex_enter(&vd->vdev_trim_zios_lock);
-	while (vd->vdev_trim_zios)
-		cv_wait(&vd->vdev_trim_zios_cv, &vd->vdev_trim_zios_lock);
-	mutex_exit(&vd->vdev_trim_zios_lock);
-
-	for (uint64_t i = 0; i < vd->vdev_children; i++) {
-		vdev_t *cvd = vd->vdev_child[i];
-		if (vdev_is_concrete(cvd))
-			trim_stop_wait(vd->vdev_child[i]);
-	}
-}
-
-/*
- * This function stops all asynchronous trim I/O going to a vdev and all
- * its children. Because trim zios occur outside of the normal transactional
- * machinery, we can't rely on the DMU hooks to stop I/O to devices being
- * removed or reconfigured. Therefore, all pool management tasks which
- * change the vdev configuration need to stop trim I/Os explicitly.
- * After this function returns, it is guaranteed that no trim zios will be
- * executing on the vdev or any of its children until either of the
- * trim locks is released.
- */
-void
-vdev_trim_stop_wait(vdev_t *vd)
-{
-	ASSERT(MUTEX_HELD(&vd->vdev_spa->spa_man_trim_lock));
-	ASSERT(MUTEX_HELD(&vd->vdev_spa->spa_auto_trim_lock));
-	/*
-	 * First we mark all devices as requesting a trim stop. This starts
-	 * the vdev queue drain (via zio_trim_should_bypass) quickly, then
-	 * we actually wait for all trim zios to get destroyed and then we
-	 * unmark the stop condition so trim zios can configure once the
-	 * pool management operation is done.
-	 */
-	trim_stop_set(vd, B_TRUE);
-	trim_stop_wait(vd);
-	trim_stop_set(vd, B_FALSE);
-}
-
-/*
- * Returns true if a management operation (such as attach/add) is trying to
- * grab this vdev and therefore any ongoing trims should be canceled.
- */
-boolean_t
-vdev_trim_should_stop(vdev_t *vd)
-{
-	return (vd->vdev_trim_zios_stop);
+	physical_rs->rs_start = intermediate.rs_start;
+	physical_rs->rs_end = intermediate.rs_end;
 }
 
 #if defined(_KERNEL)
@@ -5050,12 +4813,5 @@ MODULE_PARM_DESC(vdev_validate_skip,
 
 module_param(zfs_nocacheflush, int, 0644);
 MODULE_PARM_DESC(zfs_nocacheflush, "Disable cache flushes");
-
-module_param(zfs_trim_mem_lim_fact, int, 0644);
-MODULE_PARM_DESC(metaslabs_per_vdev, "Maximum percentage of physical memory "
-	"to be used for storing trim extents");
-
-module_param(zfs_txgs_per_trim, int, 0644);
-MODULE_PARM_DESC(zfs_txgs_per_trim, "Number of txgs per trim");
 /* END CSTYLED */
 #endif

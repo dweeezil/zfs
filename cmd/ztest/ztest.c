@@ -107,6 +107,7 @@
 #include <sys/vdev_impl.h>
 #include <sys/vdev_file.h>
 #include <sys/vdev_initialize.h>
+#include <sys/vdev_trim.h>
 #include <sys/spa_impl.h>
 #include <sys/metaslab_impl.h>
 #include <sys/dsl_prop.h>
@@ -374,10 +375,10 @@ ztest_func_t ztest_spa_upgrade;
 ztest_func_t ztest_device_removal;
 ztest_func_t ztest_spa_checkpoint_create_discard;
 ztest_func_t ztest_initialize;
+ztest_func_t ztest_trim;
 ztest_func_t ztest_fletcher;
 ztest_func_t ztest_fletcher_incr;
 ztest_func_t ztest_verify_dnode_bt;
-ztest_func_t ztest_man_trim;
 
 uint64_t zopt_always = 0ULL * NANOSEC;		/* all the time */
 uint64_t zopt_incessant = 1ULL * NANOSEC / 10;	/* every 1/10 second */
@@ -428,10 +429,10 @@ ztest_info_t ztest_info[] = {
 	ZTI_INIT(ztest_device_removal, 1, &zopt_sometimes),
 	ZTI_INIT(ztest_spa_checkpoint_create_discard, 1, &zopt_rarely),
 	ZTI_INIT(ztest_initialize, 1, &zopt_sometimes),
+	ZTI_INIT(ztest_trim, 1, &zopt_sometimes),
 	ZTI_INIT(ztest_fletcher, 1, &zopt_rarely),
 	ZTI_INIT(ztest_fletcher_incr, 1, &zopt_rarely),
 	ZTI_INIT(ztest_verify_dnode_bt, 1, &zopt_sometimes),
-	ZTI_INIT(ztest_man_trim, 1, &zopt_sometimes),
 };
 
 #define	ZTEST_FUNCS	(sizeof (ztest_info) / sizeof (ztest_info_t))
@@ -5534,21 +5535,6 @@ ztest_verify_dnode_bt(ztest_ds_t *zd, uint64_t id)
 	}
 }
 
-/*
- * Start then stop a manual TRIM.
- */
-void
-ztest_man_trim(ztest_ds_t *zd, uint64_t id)
-{
-	uint64_t rate = 1 << ztest_random(30);
-	boolean_t fulltrim = (ztest_random(5) > 0);
-	spa_t *spa = ztest_spa;
-
-	spa_man_trim(spa, rate, fulltrim);
-	(void) poll(NULL, 0, 100); /* wait a moment, then stop the TRIM. */
-	spa_man_trim_stop(spa);
-}
-
 /* ARGSUSED */
 void
 ztest_dsl_prop_get_set(ztest_ds_t *zd, uint64_t id)
@@ -6511,6 +6497,81 @@ ztest_initialize(ztest_ds_t *zd, uint64_t id)
 			(void) printf("Suspend initialize %s", path);
 			if (!active)
 				(void) printf(" failed (no initialize active)");
+			(void) printf("\n");
+		}
+		break;
+	}
+	free(path);
+	mutex_exit(&ztest_vdev_lock);
+}
+
+/* ARGSUSED */
+void
+ztest_trim(ztest_ds_t *zd, uint64_t id)
+{
+	spa_t *spa = ztest_spa;
+	int error = 0;
+
+	mutex_enter(&ztest_vdev_lock);
+
+	spa_config_enter(spa, SCL_VDEV, FTAG, RW_READER);
+
+	/* Random leaf vdev */
+	vdev_t *rand_vd = ztest_random_concrete_vdev_leaf(spa->spa_root_vdev);
+	if (rand_vd == NULL) {
+		spa_config_exit(spa, SCL_VDEV, FTAG);
+		mutex_exit(&ztest_vdev_lock);
+		return;
+	}
+
+	/*
+	 * The random vdev we've selected may change as soon as we
+	 * drop the spa_config_lock. We create local copies of things
+	 * we're interested in.
+	 */
+	uint64_t guid = rand_vd->vdev_guid;
+	char *path = strdup(rand_vd->vdev_path);
+	boolean_t active = rand_vd->vdev_trim_thread != NULL;
+
+	zfs_dbgmsg("vd %p, guid %llu", rand_vd, guid);
+	spa_config_exit(spa, SCL_VDEV, FTAG);
+
+	uint64_t cmd = ztest_random(POOL_TRIM_FUNCS);
+	uint64_t rate = 1 << ztest_random(30);
+	boolean_t fulltrim = (ztest_random(5) > 0);
+
+	nvlist_t *vdev_guids = fnvlist_alloc();
+	nvlist_t *vdev_errlist = fnvlist_alloc();
+	fnvlist_add_uint64(vdev_guids, path, guid);
+	error = spa_vdev_trim(spa, vdev_guids, cmd, rate, fulltrim,
+	    vdev_errlist);
+	fnvlist_free(vdev_guids);
+	fnvlist_free(vdev_errlist);
+
+	switch (cmd) {
+	case POOL_TRIM_CANCEL:
+		if (ztest_opts.zo_verbose >= 4) {
+			(void) printf("Cancel TRIM %s", path);
+			if (!active)
+				(void) printf(" failed (no TRIM active)");
+			(void) printf("\n");
+		}
+		break;
+	case POOL_TRIM_DO:
+		if (ztest_opts.zo_verbose >= 4) {
+			(void) printf("Start TRIM %s", path);
+			if (active && error == 0)
+				(void) printf(" failed (already active)");
+			else if (error != 0)
+				(void) printf(" failed (error %d)", error);
+			(void) printf("\n");
+		}
+		break;
+	case POOL_TRIM_SUSPEND:
+		if (ztest_opts.zo_verbose >= 4) {
+			(void) printf("Suspend TRIM %s", path);
+			if (!active)
+				(void) printf(" failed (no TRIM active)");
 			(void) printf("\n");
 		}
 		break;

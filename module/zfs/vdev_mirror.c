@@ -34,6 +34,7 @@
 #include <sys/dsl_pool.h>
 #include <sys/dsl_scan.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/zio.h>
 #include <sys/abd.h>
 #include <sys/fs/zfs.h>

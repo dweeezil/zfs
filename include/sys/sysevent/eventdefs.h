@@ -120,6 +120,9 @@ extern "C" {
 #define	ESC_ZFS_HISTORY_EVENT		"history_event"
 #define	ESC_ZFS_TRIM_START		"trim_start"
 #define	ESC_ZFS_TRIM_FINISH		"trim_finish"
+#define	ESC_ZFS_TRIM_CANCEL		"trim_cancel"
+#define	ESC_ZFS_TRIM_RESUME		"trim_resume"
+#define	ESC_ZFS_TRIM_SUSPEND		"trim_suspend"
 
 /*
  * datalink subclass definitions.

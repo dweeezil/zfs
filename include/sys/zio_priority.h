@@ -31,15 +31,8 @@ typedef enum zio_priority {
 	ZIO_PRIORITY_SCRUB,		/* asynchronous scrub/resilver reads */
 	ZIO_PRIORITY_REMOVAL,		/* reads/writes for vdev removal */
 	ZIO_PRIORITY_INITIALIZING,	/* initializing I/O */
-
-	/*
-	 * Trims are separated into auto & manual trims. If a manual trim is
-	 * initiated, auto trims are discarded late in the zio pipeline just
-	 * prior to being issued. This lets manual trim start up much faster
-	 * if a lot of auto trims have already been queued up.
-	 */
-	ZIO_PRIORITY_AUTO_TRIM,		/* async auto trim operation */
-	ZIO_PRIORITY_MAN_TRIM,		/* manual trim operation */
+	ZIO_PRIORITY_AUTO_TRIM,		/* background asynchronous auto-trim */
+	ZIO_PRIORITY_MAN_TRIM,		/* user initiated manual trim */
 	ZIO_PRIORITY_NUM_QUEUEABLE,
 	ZIO_PRIORITY_NOW,		/* non-queued i/os (e.g. free) */
 } zio_priority_t;

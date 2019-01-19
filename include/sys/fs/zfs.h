@@ -747,10 +747,6 @@ typedef struct zpool_load_policy {
 #define	ZPOOL_CONFIG_REMOVED		"removed"
 #define	ZPOOL_CONFIG_FRU		"fru"
 #define	ZPOOL_CONFIG_AUX_STATE		"aux_state"
-#define	ZPOOL_CONFIG_TRIM_PROG		"trim_prog"
-#define	ZPOOL_CONFIG_TRIM_RATE		"trim_rate"
-#define	ZPOOL_CONFIG_TRIM_START_TIME	"trim_start_time"
-#define	ZPOOL_CONFIG_TRIM_STOP_TIME	"trim_stop_time"
 
 /* Pool load policy parameters */
 #define	ZPOOL_LOAD_POLICY		"load-policy"
@@ -793,12 +789,25 @@ typedef struct zpool_load_policy {
 #define	VDEV_ALLOC_BIAS_SPECIAL		"special"
 #define	VDEV_ALLOC_BIAS_DEDUP		"dedup"
 
+/* vdev initialize state */
 #define	VDEV_LEAF_ZAP_INITIALIZE_LAST_OFFSET	\
 	"com.delphix:next_offset_to_initialize"
 #define	VDEV_LEAF_ZAP_INITIALIZE_STATE	\
 	"com.delphix:vdev_initialize_state"
 #define	VDEV_LEAF_ZAP_INITIALIZE_ACTION_TIME	\
 	"com.delphix:vdev_initialize_action_time"
+
+/* vdev TRIM state */
+#define	VDEV_LEAF_ZAP_TRIM_LAST_OFFSET	\
+	"com.nexenta:next_offset_to_trim"
+#define	VDEV_LEAF_ZAP_TRIM_STATE	\
+	"com.nexenta:vdev_trim_state"
+#define	VDEV_LEAF_ZAP_TRIM_ACTION_TIME	\
+	"com.nexenta:vdev_trim_action_time"
+#define	VDEV_LEAF_ZAP_TRIM_RATE		\
+	"com.nexenta:vdev_trim_rate"
+#define	VDEV_LEAF_ZAP_TRIM_FULL		\
+	"com.nexenta:vdev_trim_full"
 
 /*
  * This is needed in userland to report the minimum necessary device size.
@@ -922,15 +931,6 @@ typedef struct pool_checkpoint_stat {
 } pool_checkpoint_stat_t;
 
 /*
- * TRIM command configuration info.
- */
-typedef struct trim_cmd_info_s {
-	uint64_t	tci_start;	/* B_TRUE = start; B_FALSE = stop */
-	uint64_t	tci_rate;	/* requested TRIM rate in bytes/sec */
-	uint64_t	tci_fulltrim;	/* B_TRUE=trim never allocated space */
-} trim_cmd_info_t;
-
-/*
  * ZIO types.  Needed to interpret vdev statistics below.
  */
 typedef enum zio_type {
@@ -1034,6 +1034,11 @@ typedef struct vdev_stat {
 	uint64_t	vs_checkpoint_space;    /* checkpoint-consumed space */
 	uint64_t	vs_resilver_deferred;	/* resilver deferred	*/
 	uint64_t	vs_slow_ios;		/* slow IOs */
+	uint64_t	vs_trim_errors;		/* trimming errors	*/
+	uint64_t	vs_trim_bytes_done;	/* bytes trimmed */
+	uint64_t	vs_trim_bytes_est;	/* total bytes to trim */
+	uint64_t	vs_trim_state;		/* vdev_trim_state_t */
+	uint64_t	vs_trim_action_time;	/* time_t */
 } vdev_stat_t;
 
 /*
@@ -1097,6 +1102,16 @@ typedef enum pool_initialize_func {
 	POOL_INITIALIZE_SUSPEND,
 	POOL_INITIALIZE_FUNCS
 } pool_initialize_func_t;
+
+/*
+ * TRIM functions.
+ */
+typedef enum pool_trim_func {
+	POOL_TRIM_DO,
+	POOL_TRIM_CANCEL,
+	POOL_TRIM_SUSPEND,
+	POOL_TRIM_FUNCS
+} pool_trim_func_t;
 
 /*
  * Discard stats
@@ -1164,6 +1179,14 @@ typedef enum {
 	VDEV_INITIALIZE_SUSPENDED,
 	VDEV_INITIALIZE_COMPLETE
 } vdev_initializing_state_t;
+
+typedef enum {
+	VDEV_TRIM_NONE,
+	VDEV_TRIM_ACTIVE,
+	VDEV_TRIM_CANCELED,
+	VDEV_TRIM_SUSPENDED,
+	VDEV_TRIM_COMPLETE
+} vdev_trim_state_t;
 
 /*
  * /dev/zfs ioctl numbers.
@@ -1256,6 +1279,7 @@ typedef enum zfs_ioc {
 	ZFS_IOC_POOL_CHECKPOINT,		/* 0x5a4d */
 	ZFS_IOC_POOL_DISCARD_CHECKPOINT,	/* 0x5a4e */
 	ZFS_IOC_POOL_INITIALIZE,		/* 0x5a4f */
+	ZFS_IOC_POOL_TRIM,			/* 0x5a50 */
 
 	/*
 	 * Linux - 3/64 numbers reserved.
@@ -1264,7 +1288,6 @@ typedef enum zfs_ioc {
 	ZFS_IOC_EVENTS_NEXT,			/* 0x5a81 */
 	ZFS_IOC_EVENTS_CLEAR,			/* 0x5a82 */
 	ZFS_IOC_EVENTS_SEEK,			/* 0x5a83 */
-	ZFS_IOC_POOL_TRIM,			/* 0x5a84 */
 
 	/*
 	 * FreeBSD - 1/64 numbers reserved.
@@ -1355,6 +1378,14 @@ typedef enum {
  */
 #define	ZPOOL_INITIALIZE_COMMAND	"initialize_command"
 #define	ZPOOL_INITIALIZE_VDEVS		"initialize_vdevs"
+
+/*
+ * The following are names used when invoking ZFS_IOC_POOL_TRIM.
+ */
+#define	ZPOOL_TRIM_COMMAND		"trim_command"
+#define	ZPOOL_TRIM_VDEVS		"trim_vdevs"
+#define	ZPOOL_TRIM_RATE			"trim_rate"
+#define	ZPOOL_TRIM_FULL			"trim_full"
 
 /*
  * Flags for ZFS_IOC_VDEV_SET_STATE

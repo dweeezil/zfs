@@ -32,6 +32,7 @@
 #include <sys/txg.h>
 #include <sys/spa_impl.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/zio_impl.h>
 #include <sys/zio_compress.h>
 #include <sys/zio_checksum.h>
@@ -118,15 +119,6 @@ int zio_buf_debug_limit = 0;
 static inline void __zio_execute(zio_t *zio);
 
 static void zio_taskq_dispatch(zio_t *, zio_taskq_type_t, boolean_t);
-
-/*
- * Tunable to allow for debugging SCSI UNMAP/SATA TRIM calls. Disabling
- * it will prevent ZFS from attempting to issue DKIOCFREE ioctls to the
- * underlying storage.
- */
-int zfs_trim = B_TRUE;
-int zfs_trim_min_ext_sz = 128 << 10;	/* 128k */
-int zfs_trim_sync = B_TRUE;
 
 void
 zio_init(void)
@@ -855,16 +847,6 @@ zio_create(zio_t *pio, spa_t *spa, uint64_t txg, const blkptr_t *bp,
 static void
 zio_destroy(zio_t *zio)
 {
-	if (ZIO_IS_TRIM(zio)) {
-		vdev_t *vd = zio->io_vd;
-		ASSERT(vd != NULL);
-		ASSERT(!MUTEX_HELD(&vd->vdev_trim_zios_lock));
-		mutex_enter(&vd->vdev_trim_zios_lock);
-		ASSERT(vd->vdev_trim_zios != 0);
-		vd->vdev_trim_zios--;
-		cv_broadcast(&vd->vdev_trim_zios_cv);
-		mutex_exit(&vd->vdev_trim_zios_lock);
-	}
 	metaslab_trace_fini(&zio->io_alloc_list);
 	list_destroy(&zio->io_parent_list);
 	list_destroy(&zio->io_child_list);
@@ -1237,79 +1219,7 @@ zio_ioctl(zio_t *pio, spa_t *spa, vdev_t *vd, int cmd,
 	return (zio);
 }
 
-/*
- * Performs the same function as zio_trim_tree, but takes a dkioc_free_list_t
- * instead of a range tree of extents. The `dfl' argument is stored in the
- * zio and shouldn't be altered by the caller after calling zio_trim_dfl.
- * If `dfl_free_on_destroy' is true, the zio will destroy and free the list
- * using dfl_free after the zio is done executing.
- */
-zio_t *
-zio_trim_dfl(zio_t *pio, spa_t *spa, vdev_t *vd, dkioc_free_list_t *dfl,
-    boolean_t dfl_free_on_destroy, boolean_t auto_trim,
-    zio_done_func_t *done, void *private)
-{
-	zio_t *zio;
-	int c;
-
-	ASSERT(dfl->dfl_num_exts != 0);
-
-	if (!vdev_writeable(vd)) {
-		/* Skip unavailable vdevs, just create a dummy zio. */
-		zio = zio_null(pio, spa, vd, done, private, 0);
-		zio->io_dfl = dfl;
-		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
-	} else if (vd->vdev_ops->vdev_op_leaf) {
-		/*
-		 * A trim zio is a special ioctl zio that can enter the vdev
-		 * queue. We don't want to be sorted in the queue by offset,
-		 * but sometimes the queue requires that, so we fake an
-		 * offset value. We simply use the offset of the first extent
-		 * and the minimum allocation unit on the vdev to keep the
-		 * queue's algorithms working more-or-less as they should.
-		 */
-		uint64_t off = dfl->dfl_exts[0].dfle_start;
-		uint64_t size = 1 << vd->vdev_top->vdev_ashift;
-
-		zio = zio_create(pio, spa, 0, NULL, NULL,
-		    size, size, done, private, ZIO_TYPE_IOCTL,
-		    auto_trim ? ZIO_PRIORITY_AUTO_TRIM : ZIO_PRIORITY_MAN_TRIM,
-		    ZIO_FLAG_CANFAIL | ZIO_FLAG_DONT_RETRY |
-		    ZIO_FLAG_DONT_PROPAGATE | ZIO_FLAG_DONT_AGGREGATE, vd, off,
-		    NULL, ZIO_STAGE_OPEN, ZIO_TRIM_PIPELINE);
-		zio->io_cmd = DKIOCFREE;
-		zio->io_dfl = dfl;
-		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
-
-		mutex_enter(&vd->vdev_trim_zios_lock);
-		vd->vdev_trim_zios++;
-		mutex_exit(&vd->vdev_trim_zios_lock);
-	} else {
-		/*
-		 * Trims to non-leaf vdevs have two possible paths. For vdevs
-		 * that do not provide a specific trim fanout handler, we
-		 * simply duplicate the trim to each child. vdevs which do
-		 * have a trim fanout handler are responsible for doing the
-		 * fanout themselves.
-		 */
-		zio = zio_null(pio, spa, vd, done, private, 0);
-		zio->io_dfl = dfl;
-		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
-
-		if (vd->vdev_ops->vdev_op_trim != NULL) {
-			vd->vdev_ops->vdev_op_trim(vd, zio, dfl, auto_trim);
-		} else {
-			for (c = 0; c < vd->vdev_children; c++) {
-				zio_nowait(zio_trim_dfl(zio, spa,
-				    vd->vdev_child[c], dfl, B_FALSE, auto_trim,
-				    NULL, NULL));
-			}
-		}
-	}
-
-	return (zio);
-}
-
+#ifdef ZFS_DEBUG
 /*
  * This check is used by zio_trim_tree to set in dfl_ck_func to help debugging
  * extent trimming. If the SCSI driver (sd) was compiled with the DEBUG flag
@@ -1325,13 +1235,17 @@ zio_trim_check(uint64_t start, uint64_t len, void *msp)
 	boolean_t held = MUTEX_HELD(&ms->ms_lock);
 	if (!held)
 		mutex_enter(&ms->ms_lock);
+
 	ASSERT(ms->ms_trimming_ts != NULL);
+
 	if (ms->ms_loaded)
 		ASSERT(range_tree_contains(ms->ms_trimming_ts,
 		    start - VDEV_LABEL_START_SIZE, len));
+
 	if (!held)
 		mutex_exit(&ms->ms_lock);
 }
+#endif
 
 /*
  * Takes a bunch of freed extents and tells the underlying vdevs that the
@@ -1345,8 +1259,8 @@ zio_trim_check(uint64_t start, uint64_t len, void *msp)
  */
 zio_t *
 zio_trim_tree(zio_t *pio, spa_t *spa, vdev_t *vd, struct range_tree *tree,
-    boolean_t auto_trim, zio_done_func_t *done, void *private,
-    int dkiocfree_flags, metaslab_t *msp)
+    zio_done_func_t *done, void *private, zio_priority_t priority,
+    enum zio_flag flags, metaslab_t *msp)
 {
 	dkioc_free_list_t *dfl = NULL;
 	range_seg_t *rs;
@@ -1358,20 +1272,22 @@ zio_trim_tree(zio_t *pio, spa_t *spa, vdev_t *vd, struct range_tree *tree,
 
 	num_exts = avl_numnodes(&tree->rt_root);
 	dfl = dfl_alloc(num_exts, KM_SLEEP);
-	dfl->dfl_flags = dkiocfree_flags;
+	dfl->dfl_flags = 0;
 	dfl->dfl_num_exts = num_exts;
 	dfl->dfl_offset = VDEV_LABEL_START_SIZE;
+#ifdef ZFS_DEBUG
 	if (msp) {
 		dfl->dfl_ck_func = zio_trim_check;
 		dfl->dfl_ck_arg = msp;
 	}
+#endif
 
 	for (rs = avl_first(&tree->rt_root), rs_idx = 0; rs != NULL;
 	    rs = AVL_NEXT(&tree->rt_root, rs)) {
 		uint64_t len = rs->rs_end - rs->rs_start;
 
 		/* Skip extents that are too short to bother with. */
-		if (len < zfs_trim_min_ext_sz) {
+		if (len < zfs_trim_min_extent_bytes) {
 			bytes_skipped += len;
 			exts_skipped++;
 			continue;
@@ -1407,8 +1323,113 @@ zio_trim_tree(zio_t *pio, spa_t *spa, vdev_t *vd, struct range_tree *tree,
 		dfl = dfl2;
 	}
 
-	return (zio_trim_dfl(pio, spa, vd, dfl, B_TRUE, auto_trim, done,
-	    private));
+	return (zio_trim_dfl(pio, vd, dfl, done, private, priority,
+	    flags, B_TRUE));
+}
+
+/*
+ * Construct a multi-extent mapping for the DKIOCFREE ioctl().
+ *
+ * Takes a dkioc_free_list_t instead of a range tree of extents. The `dfl`
+ * argument is stored in the zio and shouldn't be altered by the caller after
+ * calling zio_trim_dfl. If `dfl_free_on_destroy' is true, the zio will
+ * destroy and free the list using dfl_free after the zio is done executing.
+ */
+zio_t *
+zio_trim_dfl(zio_t *pio, vdev_t *vd, dkioc_free_list_t *dfl,
+    zio_done_func_t *done, void *private, zio_priority_t priority,
+    enum zio_flag flags, boolean_t dfl_free_on_destroy)
+{
+	zio_t *zio;
+
+	ASSERT(dfl->dfl_num_exts != 0);
+
+	if (!vdev_writeable(vd)) {
+		/* Skip unavailable vdevs, just create a dummy zio. */
+		zio = zio_null(pio, vd->vdev_spa, vd, done, private, 0);
+		zio->io_dfl = dfl;
+		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
+	} else if (vd->vdev_ops->vdev_op_leaf) {
+		/*
+		 * A trim zio is a special ioctl zio that can enter the vdev
+		 * queue. We don't want to be sorted in the queue by offset,
+		 * but sometimes the queue requires that, so we fake an
+		 * offset value by using the offset of the first extent
+		 * and the minimum allocation unit on the vdev to keep the
+		 * queue's algorithms working more-or-less as they should.
+		 */
+		uint64_t off = dfl->dfl_exts[0].dfle_start;
+		uint64_t size = 1 << vd->vdev_top->vdev_ashift;
+
+		zio = zio_create(pio, vd->vdev_spa, 0, NULL, NULL,
+		    size, size, done, private, ZIO_TYPE_IOCTL, priority,
+		    flags | ZIO_FLAG_CANFAIL | ZIO_FLAG_DONT_RETRY |
+		    ZIO_FLAG_DONT_PROPAGATE | ZIO_FLAG_DONT_AGGREGATE,
+		    vd, off, NULL, ZIO_STAGE_OPEN, ZIO_TRIM_PIPELINE);
+		zio->io_cmd = DKIOCFREE;
+		zio->io_dfl = dfl;
+		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
+	} else {
+		/*
+		 * Trims to non-leaf vdevs have two possible paths. For vdevs
+		 * that do not provide a specific trim fanout handler, we
+		 * simply duplicate the trim to each child. vdevs which do
+		 * have a trim fanout handler are responsible for doing the
+		 * fanout themselves.
+		 */
+		zio = zio_null(pio, vd->vdev_spa, vd, done, private, 0);
+		zio->io_dfl = dfl;
+		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
+
+		if (vd->vdev_ops->vdev_op_trim != NULL) {
+			vd->vdev_ops->vdev_op_trim(vd, zio, dfl, priority);
+		} else {
+			for (int c = 0; c < vd->vdev_children; c++) {
+				zio_nowait(zio_trim_dfl(zio, vd->vdev_child[c],
+				    dfl, NULL, NULL, priority, flags, B_FALSE));
+			}
+		}
+	}
+
+	return (zio);
+}
+
+/*
+ * Construct a single extent mapping for the DKIOCFREE ioctl().
+ *
+ * For Linux the use of the ioctl() interface only adds overhead and it
+ * would be simpler to submit this as a normal discard operation.
+ * However, DKIOCFREE is the interface presented on Illumos and this has
+ * been preserved for the moment to improve compatibility.
+ */
+zio_t *
+zio_trim(zio_t *pio, vdev_t *vd, uint64_t offset, uint64_t size,
+    zio_done_func_t *done, void *private, zio_priority_t priority,
+    enum zio_flag flags)
+{
+	dkioc_free_list_t *dfl;
+	int extents = 1;
+	zio_t *zio;
+
+	/* Verify we're a multiple of the vdev ashift */
+	ASSERT0(vd->vdev_children);
+	ASSERT0(offset & ((1 << vd->vdev_ashift) - 1));
+	ASSERT0(size & ((1 << vd->vdev_ashift) - 1));
+
+	dfl = dfl_alloc(extents, KM_SLEEP);
+	dfl->dfl_flags = 0;
+	dfl->dfl_num_exts = extents;
+	dfl->dfl_offset = VDEV_LABEL_START_SIZE;
+	dfl->dfl_ck_func = NULL;
+	dfl->dfl_ck_arg = NULL;
+
+	dfl->dfl_exts[0].dfle_start = offset;
+	dfl->dfl_exts[0].dfle_length = size;
+
+	zio = zio_trim_dfl(pio, vd, dfl, done, private, priority,
+	    flags, B_TRUE);
+
+	return (zio);
 }
 
 zio_t *
@@ -3770,20 +3791,15 @@ zio_alloc_zil(spa_t *spa, objset_t *os, uint64_t txg, blkptr_t *new_bp,
  *	trim unnecessarily. Manual trim processes all empty space anyway.
  * 2) If the autotrim property of the pool is flipped to off, usually due to
  *	performance reasons, we want to stop trying to do autotrims/
- * 3) If a manual trim shutdown was requested, immediately terminate them.
- * 4) If a pool vdev reconfiguration is imminent, we must discard all queued
- *	up trims to let it proceed as quickly as possible.
  */
 static inline boolean_t
 zio_trim_should_bypass(const zio_t *zio)
 {
 	ASSERT(ZIO_IS_TRIM(zio));
-	return ((zio->io_priority == ZIO_PRIORITY_AUTO_TRIM &&
-	    (zio->io_vd->vdev_top->vdev_man_trimming ||
-	    zio->io_spa->spa_auto_trim != SPA_AUTO_TRIM_ON)) ||
-	    (zio->io_priority == ZIO_PRIORITY_MAN_TRIM &&
-	    zio->io_spa->spa_man_trim_stop) ||
-	    zio->io_vd->vdev_trim_zios_stop);
+
+	return (zio->io_priority == ZIO_PRIORITY_AUTO_TRIM &&
+	    (zio->io_vd->vdev_trim_thread != NULL ||
+	    zio->io_spa->spa_auto_trim != SPA_AUTO_TRIM_ON));
 }
 
 /*
@@ -5098,13 +5114,4 @@ MODULE_PARM_DESC(zfs_sync_pass_rewrite,
 module_param(zio_dva_throttle_enabled, int, 0644);
 MODULE_PARM_DESC(zio_dva_throttle_enabled,
 	"Throttle block allocations in the ZIO pipeline");
-
-module_param(zfs_trim, int, 0644);
-MODULE_PARM_DESC(zfs_trim, "Enable TRIM");
-
-module_param(zfs_trim_min_ext_sz, int, 0644);
-MODULE_PARM_DESC(zfs_trim_min_ext_sz, "Minimum size to TRIM");
-
-module_param(zfs_trim_sync, int, 0644);
-MODULE_PARM_DESC(zfs_trim_sync, "Issue TRIM commands synchronously");
 #endif

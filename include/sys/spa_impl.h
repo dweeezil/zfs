@@ -390,17 +390,6 @@ struct spa {
 	uint64_t	spa_num_auto_trimming;	/* # of autotrim threads */
 	taskq_t		*spa_auto_trim_taskq;
 
-	kmutex_t	spa_man_trim_lock;
-	uint64_t	spa_man_trim_rate;	/* rate of trim in bytes/sec */
-	uint64_t	spa_num_man_trimming;	/* # of manual trim threads */
-	boolean_t	spa_man_trim_stop;	/* requested manual trim stop */
-	kcondvar_t	spa_man_trim_update_cv;	/* updates to TRIM settings */
-	kcondvar_t	spa_man_trim_done_cv;	/* manual trim has completed */
-	/* For details on trim start/stop times see spa_get_trim_prog. */
-	uint64_t	spa_man_trim_start_time;
-	uint64_t	spa_man_trim_stop_time;
-	taskq_t		*spa_man_trim_taskq;
-
 	/* TRIM/UNMAP kstats */
 	spa_trimstats_t	*spa_trimstats;		/* alloc'd by kstat_create */
 	kstat_t		*spa_trimstats_ks;

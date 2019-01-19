@@ -29,6 +29,7 @@
 #include <sys/zfs_context.h>
 #include <sys/spa.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/zio.h>
 #include <sys/zio_checksum.h>
 #include <sys/abd.h>
@@ -39,7 +40,7 @@
 #include <sys/dkioc_free_util.h>
 
 #ifdef ZFS_DEBUG
-#include <sys/vdev_initialize.h>	/* vdev_xlate testing */
+#include <sys/vdev.h>	/* vdev_xlate testing */
 #endif
 
 /*
@@ -2432,7 +2433,7 @@ vdev_raidz_trim_append(dkioc_free_list_t *dfl, uint64_t *num_extsp,
  */
 static void
 vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl,
-    boolean_t auto_trim)
+    zio_priority_t priority)
 {
 	const uint64_t children = vd->vdev_children;
 	dkioc_free_list_t **sub_dfls;
@@ -2513,8 +2514,8 @@ vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl,
 	for (int i = 0; i < children; i++) {
 		if (sub_dfls_num_exts[i] != 0) {
 			vdev_t *child = vd->vdev_child[i];
-			zio_nowait(zio_trim_dfl(pio, child->vdev_spa, child,
-			    sub_dfls[i], B_TRUE, auto_trim, NULL, NULL));
+			zio_nowait(zio_trim_dfl(pio, child, sub_dfls[i],
+			    NULL, NULL, priority, 0, B_FALSE));
 		} else {
 			dfl_free(sub_dfls[i]);
 		}

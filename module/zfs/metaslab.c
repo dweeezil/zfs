@@ -36,6 +36,7 @@
 #include <sys/spa_impl.h>
 #include <sys/zfeature.h>
 #include <sys/vdev_indirect_mapping.h>
+#include <sys/vdev_trim.h>
 #include <sys/zap.h>
 #include <sys/trace_vdev.h>
 
@@ -230,19 +231,10 @@ static uint64_t metaslab_weight_from_range_tree(metaslab_t *msp);
 kmem_cache_t *metaslab_alloc_trace_cache;
 #endif
 
-/*
- * Maximum number of bytes we'll put into a single zio_trim. This is for
- * vdev queue processing purposes and also because some devices advertise
- * they can handle a lot more LBAs per command than they can handle
- * efficiently.
- */
-uint64_t zfs_max_bytes_per_trim = 128 << 20;
-
 static void metaslab_trim_remove(void *arg, uint64_t offset, uint64_t size);
 static void metaslab_trim_add(void *arg, uint64_t offset, uint64_t size);
 static uint64_t metaslab_trimming_space(const metaslab_t *msp);
-
-static zio_t *metaslab_exec_trim(metaslab_t *msp, boolean_t auto_trim);
+static zio_t *metaslab_exec_trim(metaslab_t *msp);
 
 static void metaslab_free_trimset(range_tree_t *ts);
 
@@ -654,6 +646,8 @@ metaslab_group_create(metaslab_class_t *mc, vdev_t *vd, int allocators)
 	mutex_init(&mg->mg_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&mg->mg_ms_initialize_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&mg->mg_ms_initialize_cv, NULL, CV_DEFAULT, NULL);
+	mutex_init(&mg->mg_ms_trim_lock, NULL, MUTEX_DEFAULT, NULL);
+	cv_init(&mg->mg_ms_trim_cv, NULL, CV_DEFAULT, NULL);
 	mg->mg_primaries = kmem_zalloc(allocators * sizeof (metaslab_t *),
 	    KM_SLEEP);
 	mg->mg_secondaries = kmem_zalloc(allocators * sizeof (metaslab_t *),
@@ -702,6 +696,8 @@ metaslab_group_destroy(metaslab_group_t *mg)
 	mutex_destroy(&mg->mg_lock);
 	mutex_destroy(&mg->mg_ms_initialize_lock);
 	cv_destroy(&mg->mg_ms_initialize_cv);
+	mutex_destroy(&mg->mg_ms_trim_lock);
+	cv_destroy(&mg->mg_ms_trim_cv);
 
 	for (int i = 0; i < mg->mg_allocators; i++) {
 		zfs_refcount_destroy(&mg->mg_alloc_queue_depth[i]);
@@ -2368,8 +2364,10 @@ metaslab_condense(metaslab_t *msp, uint64_t txg, dmu_tx_t *tx)
 	range_tree_destroy(condense_tree);
 
 	space_map_write(sm, msp->ms_allocatable, SM_FREE, SM_NO_VDEVID, tx);
-	if (msp->ms_trimming_ts != NULL)
-		space_map_write(sm, msp->ms_trimming_ts, SM_FREE, SM_NO_VDEVID, tx);
+	if (msp->ms_trimming_ts != NULL) {
+		space_map_write(sm, msp->ms_trimming_ts, SM_FREE,
+		    SM_NO_VDEVID, tx);
+	}
 
 	mutex_enter(&msp->ms_lock);
 	msp->ms_condensing = B_FALSE;
@@ -2680,7 +2678,7 @@ metaslab_sync_done(metaslab_t *msp, uint64_t txg)
 	 * just emptied out the defer_tree.
 	 */
 	if (spa_get_auto_trim(spa) == SPA_AUTO_TRIM_ON &&
-	    !vd->vdev_man_trimming) {
+	    vd->vdev_trim_thread == NULL) {
 		range_tree_walk(*defer_tree, metaslab_trim_add, msp);
 		if (!defer_allowed) {
 			range_tree_walk(msp->ms_freed, metaslab_trim_add, msp);
@@ -2726,7 +2724,7 @@ metaslab_sync_done(metaslab_t *msp, uint64_t txg)
 	 * from it in 'metaslab_unload_delay' txgs, then unload it.
 	 */
 	if (msp->ms_loaded &&
-	    msp->ms_initializing == 0 &&
+	    msp->ms_initializing == 0 && msp->ms_trimming &&
 	    msp->ms_selected_txg + metaslab_unload_delay < txg) {
 
 		for (int t = 1; t < TXG_CONCURRENT_STATES; t++) {
@@ -3009,6 +3007,7 @@ metaslab_block_alloc(metaslab_t *msp, uint64_t size, uint64_t txg)
 
 	VERIFY(!msp->ms_condensing);
 	VERIFY0(msp->ms_initializing);
+	VERIFY0(msp->ms_trimming);
 
 	start = mc->mc_ops->msop_alloc(msp, size);
 	if (start != -1ULL) {
@@ -3070,11 +3069,14 @@ find_valid_metaslab(metaslab_group_t *mg, uint64_t activation_weight,
 		}
 
 		/*
-		 * If the selected metaslab is condensing or being
-		 * initialized, skip it.
+		 * If the selected metaslab is condensing,  being
+		 * initialized or trimming, skip it.
 		 */
-		if (msp->ms_condensing || msp->ms_initializing > 0)
+		if (msp->ms_condensing ||
+		    msp->ms_initializing > 0 ||
+		    msp->ms_trimming > 0) {
 			continue;
+		}
 
 		*was_active = msp->ms_allocator != -1;
 		/*
@@ -3248,6 +3250,13 @@ metaslab_group_alloc_normal(metaslab_group_t *mg, zio_alloc_list_t *zal,
 		} else if (msp->ms_initializing > 0) {
 			metaslab_trace_add(zal, mg, msp, asize, d,
 			    TRACE_INITIALIZING, allocator);
+			metaslab_passivate(msp, msp->ms_weight &
+			    ~METASLAB_ACTIVE_MASK);
+			mutex_exit(&msp->ms_lock);
+			continue;
+		} else if (msp->ms_trimming > 0) {
+			metaslab_trace_add(zal, mg, msp, asize, d,
+			    TRACE_TRIMMING, allocator);
 			metaslab_passivate(msp, msp->ms_weight &
 			    ~METASLAB_ACTIVE_MASK);
 			mutex_exit(&msp->ms_lock);
@@ -3862,7 +3871,7 @@ metaslab_unalloc_dva(spa_t *spa, const dva_t *dva, uint64_t txg)
 	}
 	range_tree_add(msp->ms_allocatable, offset, size);
 	if (spa_get_auto_trim(spa) == SPA_AUTO_TRIM_ON &&
-	    !vd->vdev_man_trimming)
+	    vd->vdev_trim_thread == NULL)
 		metaslab_trim_add(msp, offset, size);
 	mutex_exit(&msp->ms_lock);
 }
@@ -4331,117 +4340,6 @@ metaslab_check_free(spa_t *spa, const blkptr_t *bp)
 }
 
 /*
- * This is used to trim all free space in a metaslab. The caller must
- * initially set 'cursor' to the start offset of the metaslab. This function
- * then walks the free space starting at or after this cursor and composes a
- * TRIM zio for it. The function limits the number of bytes placed into the
- * TRIM zio to at most zfs_max_bytes_per_trim. If the limit was hit before
- * trimming all free space in the metaslab, the 'cursor' is updated to the
- * last place we left off. The caller should keep calling this function in
- * a loop as long as there is more space to trim. The function returns a TRIM
- * zio that the caller should zio_wait for. If there is no more free space to
- * trim in this metaslab, the function returns NULL instead. The 'delta'
- * return argument contains the number of bytes scheduled for trimming in the
- * returned TRIM zio.
- * During execution, this function needs to load the metaslab. 'was_loaded'
- * is an external state variable that is used to determine if the metaslab
- * load was initiated by us and therefore whether we should unload the
- * metaslab once we're done.
- */
-zio_t *
-metaslab_trim_all(metaslab_t *msp, uint64_t *cursor, uint64_t *delta,
-    boolean_t *was_loaded)
-{
-	uint64_t cur = *cursor;
-	uint64_t trimmed_space = 0;
-	zio_t *trim_io = NULL;
-	range_seg_t rsearch;
-	range_seg_t *rs;
-	avl_index_t where;
-	const uint64_t max_bytes = zfs_max_bytes_per_trim;
-
-	ASSERT(!MUTEX_HELD(&msp->ms_group->mg_lock));
-	ASSERT3U(cur, >=, msp->ms_start);
-	ASSERT3U(cur, <=, msp->ms_start + msp->ms_size);
-
-	mutex_enter(&msp->ms_lock);
-
-	while (msp->ms_loading)
-		metaslab_load_wait(msp);
-	/*
-	 * On the initial call we memorize if we had to load the metaslab
-	 * for ourselves, so we can unload it when we're done.
-	 */
-	if (cur == msp->ms_start)
-		*was_loaded = msp->ms_loaded;
-	if (!msp->ms_loaded) {
-		if (metaslab_load(msp) != 0) {
-			/* Load failed, stop trimming this metaslab */
-			*cursor = msp->ms_start + msp->ms_size;
-			mutex_exit(&msp->ms_lock);
-			return (NULL);
-		}
-	}
-
-	/*
-	 * Drop any scheduled extents and add everything in ms_tree from
-	 * the last cursor position, but not more than the trim run limit.
-	 */
-	range_tree_vacate(msp->ms_cur_ts, NULL, NULL);
-
-	/* Clear out ms_prev_ts, since we'll be trimming everything. */
-	if (msp->ms_prev_ts != NULL) {
-		metaslab_free_trimset(msp->ms_prev_ts);
-		msp->ms_prev_ts = NULL;
-	}
-
-	rsearch.rs_start = cur;
-	rsearch.rs_end = cur + SPA_MINBLOCKSIZE;
-	rs = avl_find(&msp->ms_allocatable->rt_root, &rsearch, &where);
-	if (rs == NULL) {
-		rs = avl_nearest(&msp->ms_allocatable->rt_root, where, AVL_AFTER);
-		if (rs != NULL)
-			cur = rs->rs_start;
-	}
-
-	while (rs != NULL && trimmed_space < max_bytes) {
-		uint64_t end;
-		if (cur < rs->rs_start)
-			cur = rs->rs_start;
-		end = MIN(cur + (max_bytes - trimmed_space), rs->rs_end);
-		metaslab_trim_add(msp, cur, end - cur);
-		trimmed_space += (end - cur);
-		cur = end;
-		if (cur == rs->rs_end)
-			rs = AVL_NEXT(&msp->ms_allocatable->rt_root, rs);
-	}
-
-	if (trimmed_space != 0) {
-		/* Force this trim to take place ASAP. */
-		msp->ms_prev_ts = msp->ms_cur_ts;
-		msp->ms_cur_ts = range_tree_create(NULL, NULL);
-		trim_io = metaslab_exec_trim(msp, B_FALSE);
-		ASSERT(trim_io != NULL);
-
-		/*
-		 * Not at the end of this metaslab yet, have vdev_man_trim
-		 * come back around for another run.
-		 */
-		*cursor = cur;
-	} else {
-		*cursor = msp->ms_start + msp->ms_size;
-		if (!(*was_loaded) && !vdev_is_dirty(msp->ms_group->mg_vd,
-		    VDD_METASLAB, msp) && msp->ms_activation_weight == 0)
-			metaslab_unload(msp);
-	}
-
-	mutex_exit(&msp->ms_lock);
-	*delta = trimmed_space;
-
-	return (trim_io);
-}
-
-/*
  * Notifies the trimsets in a metaslab that an extent has been allocated.
  * This removes the segment from the queues of extents awaiting to be trimmed.
  */
@@ -4529,7 +4427,7 @@ metaslab_auto_trim(metaslab_t *msp, boolean_t preserve_spilled)
 				spa_trimstats_auto_slow_incr(spa);
 			}
 			metaslab_free_trimset(msp->ms_prev_ts);
-		} else if (msp->ms_group->mg_vd->vdev_man_trimming) {
+		} else if (msp->ms_group->mg_vd->vdev_trim_thread != NULL) {
 			/*
 			 * If a manual trim is ongoing, we want to inhibit
 			 * autotrim temporarily so it doesn't slow down the
@@ -4543,7 +4441,7 @@ metaslab_auto_trim(metaslab_t *msp, boolean_t preserve_spilled)
 			 * to deny allocations from these regions while the
 			 * trims are ongoing.
 			 */
-			zio_nowait(metaslab_exec_trim(msp, B_TRUE));
+			zio_nowait(metaslab_exec_trim(msp));
 		}
 	}
 	msp->ms_prev_ts = msp->ms_cur_ts;
@@ -4568,7 +4466,7 @@ metaslab_trimset_mem_used(range_tree_t *ts)
 
 	result += avl_numnodes(&ts->rt_root) * (sizeof (range_seg_t) +
 	    sizeof (dkioc_free_list_ext_t));
-	result += ((range_tree_space(ts) / zfs_max_bytes_per_trim) + 1) *
+	result += ((range_tree_space(ts) / zfs_trim_max_extent_bytes) + 1) *
 	    sizeof (zio_t);
 	result += sizeof (range_tree_t);
 
@@ -4617,6 +4515,13 @@ metaslab_trim_done(zio_t *zio)
 		mutex_exit(&msp->ms_lock);
 }
 
+/* XXX: Needs to be updated. */
+static boolean_t
+vdev_auto_trim_should_stop(vdev_t *vd)
+{
+	return (B_FALSE);
+}
+
 /*
  * Executes a zio_trim on a range tree holding freed extents in the metaslab.
  * The set of extents is taken from the metaslab's ms_prev_ts. If there is
@@ -4637,16 +4542,13 @@ metaslab_trim_done(zio_t *zio)
  * The function always returns a zio that the caller should zio_(no)wait.
  */
 static zio_t *
-metaslab_exec_trim(metaslab_t *msp, boolean_t auto_trim)
+metaslab_exec_trim(metaslab_t *msp)
 {
 	metaslab_group_t *mg = msp->ms_group;
 	spa_t *spa = mg->mg_class->mc_spa;
 	vdev_t *vd = mg->mg_vd;
 	range_tree_t *trim_tree;
-	const uint64_t max_bytes = zfs_max_bytes_per_trim;
-	const enum zio_flag trim_flags = ZIO_FLAG_CANFAIL |
-	    ZIO_FLAG_DONT_PROPAGATE | ZIO_FLAG_DONT_RETRY |
-	    ZIO_FLAG_CONFIG_WRITER;
+	const uint64_t max_bytes = zfs_trim_max_extent_bytes;
 	zio_t *zio = NULL;
 
 	ASSERT(MUTEX_HELD(&msp->ms_lock));
@@ -4660,14 +4562,14 @@ metaslab_exec_trim(metaslab_t *msp, boolean_t auto_trim)
 		cv_wait(&msp->ms_condensing_cv, &msp->ms_lock);
 
 	/* wait for a preceding trim to finish */
-	while (msp->ms_trimming_ts != NULL && !vdev_trim_should_stop(vd))
+	while (msp->ms_trimming_ts != NULL && !vdev_auto_trim_should_stop(vd))
 		cv_wait(&msp->ms_trim_cv, &msp->ms_lock);
 
 	/*
 	 * If a management operation is about to happen, we need to stop
 	 * pushing new trims into the pipeline.
 	 */
-	if (vdev_trim_should_stop(vd)) {
+	if (vdev_auto_trim_should_stop(vd)) {
 		metaslab_free_trimset(msp->ms_prev_ts);
 		msp->ms_prev_ts = NULL;
 		return (zio_null(NULL, spa, NULL, NULL, NULL, 0));
@@ -4721,48 +4623,43 @@ metaslab_exec_trim(metaslab_t *msp, boolean_t auto_trim)
 		    (msp->ms_weight & METASLAB_ACTIVE_MASK));
 	}
 
-	if (auto_trim) {
-		uint64_t start = 0;
-		range_seg_t *rs;
-		range_tree_t *sub_trim_tree = range_tree_create(NULL, NULL);
+	uint64_t start = 0;
+	range_seg_t *rs;
+	range_tree_t *sub_trim_tree = range_tree_create(NULL, NULL);
 
-		zio = zio_null(NULL, spa, vd, metaslab_trim_done, msp, 0);
+	zio = zio_null(NULL, spa, vd, metaslab_trim_done, msp, 0);
 
-		rs = avl_first(&trim_tree->rt_root);
-		if (rs != NULL)
-			start = rs->rs_start;
-		while (rs != NULL) {
-			uint64_t end = MIN(rs->rs_end, start + (max_bytes -
-			    range_tree_space(sub_trim_tree)));
+	rs = avl_first(&trim_tree->rt_root);
+	if (rs != NULL)
+		start = rs->rs_start;
+	while (rs != NULL) {
+		uint64_t end = MIN(rs->rs_end, start + (max_bytes -
+		    range_tree_space(sub_trim_tree)));
 
-			ASSERT3U(start, <=, end);
-			if (start == end) {
-				rs = AVL_NEXT(&trim_tree->rt_root, rs);
-				if (rs != NULL)
-					start = rs->rs_start;
-				continue;
-			}
-			range_tree_add(sub_trim_tree, start, end - start);
-			ASSERT3U(range_tree_space(sub_trim_tree), <=,
-			    max_bytes);
-			if (range_tree_space(sub_trim_tree) == max_bytes) {
-				zio_nowait(zio_trim_tree(zio, spa, vd,
-				    sub_trim_tree, auto_trim, NULL, NULL,
-				    trim_flags, msp));
-				range_tree_vacate(sub_trim_tree, NULL, NULL);
-			}
-			start = end;
+		ASSERT3U(start, <=, end);
+		if (start == end) {
+			rs = AVL_NEXT(&trim_tree->rt_root, rs);
+			if (rs != NULL)
+				start = rs->rs_start;
+			continue;
 		}
-		if (range_tree_space(sub_trim_tree) != 0) {
-			zio_nowait(zio_trim_tree(zio, spa, vd, sub_trim_tree,
-			    auto_trim, NULL, NULL, trim_flags, msp));
+		range_tree_add(sub_trim_tree, start, end - start);
+		ASSERT3U(range_tree_space(sub_trim_tree), <=,
+		    max_bytes);
+		if (range_tree_space(sub_trim_tree) == max_bytes) {
+			zio_nowait(zio_trim_tree(zio, spa, vd,
+			    sub_trim_tree, NULL, NULL,
+			    ZIO_PRIORITY_AUTO_TRIM, 0, msp));
 			range_tree_vacate(sub_trim_tree, NULL, NULL);
 		}
-		range_tree_destroy(sub_trim_tree);
-	} else {
-		zio = zio_trim_tree(NULL, spa, vd, trim_tree, auto_trim,
-		    metaslab_trim_done, msp, trim_flags, msp);
+		start = end;
 	}
+	if (range_tree_space(sub_trim_tree) != 0) {
+		zio_nowait(zio_trim_tree(zio, spa, vd, sub_trim_tree,
+		    NULL, NULL, ZIO_PRIORITY_AUTO_TRIM, 0, msp));
+		range_tree_vacate(sub_trim_tree, NULL, NULL);
+	}
+	range_tree_destroy(sub_trim_tree);
 
 out:
 	spa_config_exit(spa, SCL_STATE_ALL, FTAG);

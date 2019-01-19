@@ -29,6 +29,7 @@
 #include <sys/spa_impl.h>
 #include <sys/vdev_file.h>
 #include <sys/vdev_impl.h>
+#include <sys/vdev_trim.h>
 #include <sys/zio.h>
 #include <sys/fs/zfs.h>
 #include <sys/fm/fs/zfs.h>
@@ -233,7 +234,7 @@ vdev_file_io_start(zio_t *zio)
 			const dkioc_free_list_t *dfl = zio->io_dfl;
 
 			ASSERT(dfl != NULL);
-			if (!zfs_trim)
+			if (!zfs_trim_enabled)
 				break;
 
 			zio->io_dfl_stats = kmem_zalloc(

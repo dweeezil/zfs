@@ -815,8 +815,6 @@ vdev_queue_io(zio_t *zio)
 		    zio->io_priority != ZIO_PRIORITY_REMOVAL &&
 		    zio->io_priority != ZIO_PRIORITY_INITIALIZING)
 			zio->io_priority = ZIO_PRIORITY_ASYNC_WRITE;
-	} else {
-		ASSERT(ZIO_IS_TRIM(zio));
 	}
 
 	zio->io_flags |= ZIO_FLAG_DONT_CACHE | ZIO_FLAG_DONT_QUEUE;
