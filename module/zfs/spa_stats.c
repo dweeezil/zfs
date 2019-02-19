@@ -905,7 +905,7 @@ static spa_iostats_t spa_iostats_template = {
 #define	SPA_IOSTATS_ADD(stat, val) \
     atomic_add_64(&iostats->stat.value.ui64, (val));
 
-extern void
+void
 spa_iostats_trim_add(spa_t *spa, zio_priority_t priority,
     uint64_t extents_written, uint64_t bytes_written,
     uint64_t extents_skipped, uint64_t bytes_skipped,
