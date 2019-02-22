@@ -711,10 +711,15 @@ vdev_trim_range_add(void *arg, uint64_t start, uint64_t size)
 
 	/*
 	 * Every range to be trimmed must be part of ms_allocatable.
+	 * When ZFS_DEBUG_TRIM is set load the metaslab to verify this
+	 * is always the case.
 	 */
-	ASSERT3B(ta->trim_msp->ms_loaded, ==, B_TRUE);
-	ASSERT(range_tree_find(ta->trim_msp->ms_allocatable,
-	    start, size) != NULL);
+	if (zfs_flags & ZFS_DEBUG_TRIM) {
+		metaslab_t *msp = ta->trim_msp;
+		VERIFY0(metaslab_load(msp));
+		VERIFY3B(msp->ms_loaded, ==, B_TRUE);
+		VERIFY(range_tree_find(msp->ms_allocatable, start, size));
+	}
 
 	ASSERT(vd->vdev_ops->vdev_op_leaf);
 	vdev_xlate(vd, &logical_rs, &physical_rs);
@@ -1151,15 +1156,6 @@ vdev_autotrim_thread(void *arg)
 			}
 
 			/*
-			 * The ms_trim tree is a subset of the ms_allocatable
-			 * tree.  When ZFS_DEBUG_TRIM is set load the metaslab
-			 * in order to verify the trim ranges both before and
-			 * after issuing the TRIM IO.
-			 */
-			if (zfs_flags & ZFS_DEBUG_TRIM)
-				VERIFY0(metaslab_load(msp));
-
-			/*
 			 * Allocate an empty range tree which is swapped in
 			 * for the existing ms_trim tree while it is processed.
 			 */
@@ -1202,6 +1198,7 @@ vdev_autotrim_thread(void *arg)
 
 				if (cvd->vdev_detached ||
 				    !vdev_writeable(cvd) ||
+				    cvd->vdev_notrim ||
 				    !cvd->vdev_ops->vdev_op_leaf ||
 				    cvd->vdev_trim_thread != NULL)
 					continue;
@@ -1253,7 +1250,7 @@ vdev_autotrim_thread(void *arg)
 			if (zfs_flags & ZFS_DEBUG_TRIM) {
 				mutex_enter(&msp->ms_lock);
 				VERIFY0(metaslab_load(msp));
-				ASSERT3P(tap[0].trim_msp, ==, msp);
+				VERIFY3P(tap[0].trim_msp, ==, msp);
 				range_tree_walk(trim_tree,
 				    vdev_trim_range_verify, &tap[0]);
 				mutex_exit(&msp->ms_lock);
