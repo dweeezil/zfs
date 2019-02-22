@@ -94,7 +94,7 @@ for type in "" "mirror" "raidz" "raidz2" "raidz3"; do
 
 	# Remove the file, wait for trim, verify the vdevs are now sparse.
 	log_must rm /$TESTPOOL/file
-	wait_trim_io $TESTPOOL "ind" 32
+	wait_trim_io $TESTPOOL "ind" 64
 	verify_vdevs "-le" "$VDEV_MIN_MB" $TRIM_VDEVS
 
 	log_must zpool destroy $TESTPOOL

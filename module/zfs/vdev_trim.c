@@ -177,6 +177,10 @@ vdev_trim_zap_update_sync(void *arg, dmu_tx_t *tx)
 
 	if (vd->vdev_trim_rate > 0) {
 		uint64_t rate = (uint64_t)vd->vdev_trim_rate;
+
+		if (rate == UINT64_MAX)
+			rate = 0;
+
 		VERIFY0(zap_update(mos, vd->vdev_leaf_zap,
 		    VDEV_LEAF_ZAP_TRIM_RATE, sizeof (rate), 1, &rate, tx));
 	}
@@ -215,13 +219,14 @@ vdev_trim_change_state(vdev_t *vd, vdev_trim_state_t new_state,
 
 	/*
 	 * If we're activating, then preserve the requested rate and trim
-	 * method.  Setting the last offset to UINT64_MAX is used as a
-	 * sentinel to indicate the offset should be reset to be start.
+	 * method.  Setting the last offset and rate to UINT64_MAX is used
+	 * as a sentinel to indicate they should be reset to default values.
 	 */
 	if (new_state == VDEV_TRIM_ACTIVE) {
-		if (vd->vdev_trim_state == VDEV_TRIM_COMPLETE) {
+		if (vd->vdev_trim_state == VDEV_TRIM_COMPLETE ||
+		    vd->vdev_trim_state == VDEV_TRIM_CANCELED) {
 			vd->vdev_trim_last_offset = UINT64_MAX;
-			vd->vdev_trim_rate = 0;
+			vd->vdev_trim_rate = UINT64_MAX;
 			vd->vdev_trim_partial = 0;
 		}
 
