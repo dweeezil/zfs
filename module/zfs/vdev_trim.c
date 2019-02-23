@@ -854,6 +854,7 @@ vdev_trim_thread(void *arg)
 
 		spa_config_exit(spa, SCL_CONFIG, FTAG);
 		error = vdev_trim_ranges(&ta);
+		txg_wait_synced(spa_get_dsl(spa), 0);
 		vdev_trim_ms_unmark(msp);
 		spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 
@@ -880,17 +881,6 @@ vdev_trim_thread(void *arg)
 		    vd->vdev_trim_rate, vd->vdev_trim_partial);
 	}
 	ASSERT(vd->vdev_trim_thread != NULL || vd->vdev_trim_inflight[0] == 0);
-
-	/*
-	 * Drop the vdev_trim_lock while we sync out the txg since it's
-	 * possible that a device might be trying to come online and must
-	 * check to see if it needs to restart a trim. That thread will be
-	 * holding the spa_config_lock which would prevent the txg_wait_synced
-	 * from completing.
-	 */
-	mutex_exit(&vd->vdev_trim_lock);
-	txg_wait_synced(spa_get_dsl(spa), 0);
-	mutex_enter(&vd->vdev_trim_lock);
 
 	vd->vdev_trim_thread = NULL;
 	cv_broadcast(&vd->vdev_trim_cv);
