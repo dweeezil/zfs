@@ -204,6 +204,7 @@ typedef struct spa_txg_history {
 	uint64_t	writes;		/* number of write operations */
 	uint64_t	ndirty;		/* number of dirty bytes */
 	hrtime_t	times[TXG_STATE_COMMITTED]; /* completion times */
+	int		passes;		/* sync passes */
 	procfs_list_node_t	sth_node;
 } spa_txg_history_t;
 
@@ -211,9 +212,9 @@ static int
 spa_txg_history_show_header(struct seq_file *f)
 {
 	seq_printf(f, "%-8s %-16s %-5s %-12s %-12s %-12s "
-	    "%-8s %-8s %-12s %-12s %-12s %-12s\n", "txg", "birth", "state",
+	    "%-8s %-8s %-12s %-12s %-12s %-12s %-7s\n", "txg", "birth", "state",
 	    "ndirty", "nread", "nwritten", "reads", "writes",
-	    "otime", "qtime", "wtime", "stime");
+	    "otime", "qtime", "wtime", "stime", "passes");
 	return (0);
 }
 
@@ -251,13 +252,14 @@ spa_txg_history_show(struct seq_file *f, void *data)
 		    sth->times[TXG_STATE_WAIT_FOR_SYNC];
 
 	seq_printf(f, "%-8llu %-16llu %-5c %-12llu "
-	    "%-12llu %-12llu %-8llu %-8llu %-12llu %-12llu %-12llu %-12llu\n",
+	    "%-12llu %-12llu %-8llu %-8llu %-12llu %-12llu %-12llu %-12llu "
+	    "%-7d\n",
 	    (longlong_t)sth->txg, sth->times[TXG_STATE_BIRTH], state,
 	    (u_longlong_t)sth->ndirty,
 	    (u_longlong_t)sth->nread, (u_longlong_t)sth->nwritten,
 	    (u_longlong_t)sth->reads, (u_longlong_t)sth->writes,
 	    (u_longlong_t)open, (u_longlong_t)quiesce, (u_longlong_t)wait,
-	    (u_longlong_t)sync);
+	    (u_longlong_t)sync, sth->passes);
 
 	return (0);
 }
@@ -379,7 +381,8 @@ spa_txg_history_set(spa_t *spa, uint64_t txg, txg_state_t completed_state,
  */
 static int
 spa_txg_history_set_io(spa_t *spa, uint64_t txg, uint64_t nread,
-    uint64_t nwritten, uint64_t reads, uint64_t writes, uint64_t ndirty)
+    uint64_t nwritten, uint64_t reads, uint64_t writes, uint64_t ndirty,
+    int pass)
 {
 	spa_history_list_t *shl = &spa->spa_stats.txg_history;
 	spa_txg_history_t *sth;
@@ -397,6 +400,7 @@ spa_txg_history_set_io(spa_t *spa, uint64_t txg, uint64_t nread,
 			sth->reads = reads;
 			sth->writes = writes;
 			sth->ndirty = ndirty;
+			sth->passes = pass;
 			error = 0;
 			break;
 		}
@@ -429,7 +433,7 @@ spa_txg_history_init_io(spa_t *spa, uint64_t txg, dsl_pool_t *dp)
 }
 
 void
-spa_txg_history_fini_io(spa_t *spa, txg_stat_t *ts)
+spa_txg_history_fini_io(spa_t *spa, txg_stat_t *ts, int pass)
 {
 	if (ts == NULL)
 		return;
@@ -449,7 +453,7 @@ spa_txg_history_fini_io(spa_t *spa, txg_stat_t *ts)
 	    ts->vs2.vs_bytes[ZIO_TYPE_WRITE] - ts->vs1.vs_bytes[ZIO_TYPE_WRITE],
 	    ts->vs2.vs_ops[ZIO_TYPE_READ] - ts->vs1.vs_ops[ZIO_TYPE_READ],
 	    ts->vs2.vs_ops[ZIO_TYPE_WRITE] - ts->vs1.vs_ops[ZIO_TYPE_WRITE],
-	    ts->ndirty);
+	    ts->ndirty, pass);
 
 	kmem_free(ts, sizeof (txg_stat_t));
 }

@@ -836,7 +836,7 @@ extern int spa_scan_stop(spa_t *spa);
 extern int spa_scrub_pause_resume(spa_t *spa, pool_scrub_cmd_t flag);
 
 /* spa syncing */
-extern void spa_sync(spa_t *spa, uint64_t txg); /* only for DMU use */
+extern int spa_sync(spa_t *spa, uint64_t txg); /* only for DMU use */
 extern void spa_sync_allpools(void);
 
 extern int zfs_sync_pass_deferred_free;
@@ -953,7 +953,7 @@ extern int spa_txg_history_set(spa_t *spa,  uint64_t txg,
     txg_state_t completed_state, hrtime_t completed_time);
 extern txg_stat_t *spa_txg_history_init_io(spa_t *, uint64_t,
     struct dsl_pool *);
-extern void spa_txg_history_fini_io(spa_t *, txg_stat_t *);
+extern void spa_txg_history_fini_io(spa_t *, txg_stat_t *, int);
 extern void spa_tx_assign_add_nsecs(spa_t *spa, uint64_t nsecs);
 extern int spa_mmp_history_set_skip(spa_t *spa, uint64_t mmp_kstat_id);
 extern int spa_mmp_history_set(spa_t *spa, uint64_t mmp_kstat_id, int io_error,

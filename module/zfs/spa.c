@@ -8291,7 +8291,7 @@ spa_sync_rewrite_vdev_config(spa_t *spa, dmu_tx_t *tx)
  * Sync the specified transaction group.  New blocks may be dirtied as
  * part of the process, so we iterate until it converges.
  */
-void
+int
 spa_sync(spa_t *spa, uint64_t txg)
 {
 	vdev_t *vd = NULL;
@@ -8452,6 +8452,7 @@ spa_sync(spa_t *spa, uint64_t txg)
 	while (zfs_pause_spa_sync)
 		delay(1);
 
+	int pass = spa->spa_sync_pass;
 	spa->spa_sync_pass = 0;
 
 	/*
@@ -8469,6 +8470,7 @@ spa_sync(spa_t *spa, uint64_t txg)
 	 * If any async tasks have been requested, kick them off.
 	 */
 	spa_async_dispatch(spa);
+	return (pass);
 }
 
 /*

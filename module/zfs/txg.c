@@ -576,9 +576,9 @@ txg_sync_thread(void *arg)
 
 		txg_stat_t *ts = spa_txg_history_init_io(spa, txg, dp);
 		start = ddi_get_lbolt();
-		spa_sync(spa, txg);
+		int pass = spa_sync(spa, txg);
 		delta = ddi_get_lbolt() - start;
-		spa_txg_history_fini_io(spa, ts);
+		spa_txg_history_fini_io(spa, ts, pass);
 
 		mutex_enter(&tx->tx_sync_lock);
 		tx->tx_synced_txg = txg;
